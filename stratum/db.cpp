@@ -478,9 +478,9 @@ void db_update_remotes(YAAMP_DB *db)
 		if(remote->renter)
 		{
 			if(!strcmp(g_current_algo->name, "sha256"))
-				remote->speed = min(remote->speed, max(remote->renter->balance/g_current_algo->rent*100000000, 1));
+				remote->speed = MIN(remote->speed, MAX(remote->renter->balance/g_current_algo->rent*100000000, 1));
 			else
-				remote->speed = min(remote->speed, max(remote->renter->balance/g_current_algo->rent*100000, 1));
+				remote->speed = MIN(remote->speed, MAX(remote->renter->balance/g_current_algo->rent*100000, 1));
 		}
 	}
 
