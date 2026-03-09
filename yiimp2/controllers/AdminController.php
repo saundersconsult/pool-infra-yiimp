@@ -8,6 +8,8 @@ use yii\web\Controller;
 use yii\web\Response;
 use yii\filters\VerbFilter;
 use app\models\LoginForm;
+
+use app\components\rpc\WalletRPC;
 use app\models\Coins;
 
 class AdminController extends Controller
@@ -205,5 +207,105 @@ class AdminController extends Controller
 	{
 		return $this->renderPartial('coinwallet_details');
 	}
+
+	/////////////////////////////////////////////////
+
+	public function actionCoinwallet_create()
+	{
+		$coin = new db_coins;
+		$coin->txmessage = true;
+		$coin->created = time();
+		$coin->index_avg = 1;
+		$coin->difficulty = 1;
+		$coin->installed = 1;
+		$coin->visible = 1;
+
+		$coin->lastblock = '';
+
+		if(isset($_POST['Coins']))
+		{
+			$coin->setAttributes($_POST['Coins'], false);
+			if($coin->validate() && $coin->save())
+				return $this->redirect(array('coinwallets'));
+		}
+
+		return $this->render('coinwallet_form', array('update'=>false, 'coin'=>$coin));
+	}
+
+	public function actionCoinwallet_update()
+	{
+		$coin = Coins::findOne(['id' => (int) Yii::$app->getRequest()->getQueryParam('id')]);
+		$txfee = $coin->txfee;
+
+		if($coin && isset($_POST['Coins']))
+		{
+			$coin->setAttributes($_POST['Coins'], false);
+
+			if($coin->validate() && $coin->save())
+			{
+				if($txfee != $coin->txfee)
+				{
+					$remote = new WalletRPC($coin);
+					$remote->settxfee($coin->txfee);
+				}
+				return $this->redirect(array('coinwallet', 'id'=>$coin->id));
+			}
+		}
+
+		return $this->render('coinwallet_form', array('update'=>true, 'coin'=>$coin));
+	}
+
+    /////////////////////////////////////////////////
+
+	public function actionEarning()
+	{
+		return $this->render('earning');
+	}
+
+	public function actionEarning_results()
+	{
+		return $this->renderPartial('earning_results');
+	}
+
+	// called from the wallet
+	public function actionClearearnings()
+	{
+		$coin = Coins::findOne(['id' => (int) Yii::$app->getRequest()->getQueryParam('id')]);
+		if ($coin) {
+			BackendClearEarnings($coin->id);
+		}
+		return $this->goback();
+	}
+
+    /////////////////////////////////////////////////
+
+	public function actionExchange()
+	{
+		return $this->render('exchange');
+	}
+
+	public function actionExchange_results()
+	{
+		return $this->renderPartial('exchange_results');
+	}
+
+    /////////////////////////////////////////////////
+   	public function actionMemcached()
+	{
+		return $this->render('memcached');
+	}
+
+    /////////////////////////////////////////////////
+
+	public function actionConnections()
+	{
+		return $this->render('connections');
+	}
+
+	public function actionConnections_results()
+	{
+		return $this->renderPartial('connections_results');
+	}
+
 
 }

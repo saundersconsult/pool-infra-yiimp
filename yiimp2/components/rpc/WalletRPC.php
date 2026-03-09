@@ -19,7 +19,7 @@ class WalletRPC {
 	}
 
 	public function __call($name, $arguments) {
-        if (method_exists($this->connector, $name) || method_exists($this->connector, '__call')) {
+        if (isset($this->connector) && (method_exists($this->connector, $name) || method_exists($this->connector, '__call'))) {
             return call_user_func_array([$this->connector, $name], $arguments);
         } else {
             error_log("undefined method $name in wallet-rpc");

@@ -102,7 +102,7 @@ $this->registerLinkTag(['rel' => 'icon', 'type' => 'image/x-icon', 'href' => Yii
 <footer id="footer" class="mt-auto py-3 bg-light">
     <div class="container">
         <div class="row text-muted">
-            <div class="text-center">&copy; <?php echo date('Y').' '.YAAMP_SITE_NAME ?> - <a href="https://github.com/Kudaraidee/yiimp">Open source Project</a></p></div>
+            <div class="text-center">&copy; <?php echo date('Y').' '.YAAMP_SITE_NAME ?> - <a href="https://github.com/tpfuemp/yiimp">Open source Project</a></p></div>
         </div>
     </div>
 </footer>

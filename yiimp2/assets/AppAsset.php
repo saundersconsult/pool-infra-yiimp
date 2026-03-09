@@ -16,6 +16,8 @@ class AppAsset extends AssetBundle
         'css/site.css',
         'css/main.css',
         'css/table.css',
+        'css/jquery-ui.css',
+        'css/uni-form.css'
     ];
     public $js = [
         'js/jquery.tablesorter.js',

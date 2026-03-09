@@ -119,9 +119,9 @@ foreach ($list as $market) {
 
     echo '<td style="max-width: 800px; text-overflow: ellipsis; overflow: hidden;">';
     if (!empty($market->deposit_address)) {
-        $name = CJavaScript::encode($market->name);
-        $addr = CJavaScript::encode($market->deposit_address);
-        echo CHtml::link(YAAMP_ALLOW_EXCHANGE ? "sell" : "send", "javascript:;", array(
+        $name = \yii\helpers\Json::encode($market->name);
+        $addr = \yii\helpers\Json::encode($market->deposit_address);
+        echo Html::a(YAAMP_ALLOW_EXCHANGE ? "sell" : "send", "javascript:;", array(
             'onclick' => "return showSellAmountDialog($name, $addr, {$market->id});"
         ));
         echo ' ' . $market->deposit_address;
@@ -481,7 +481,7 @@ foreach ($txs_array as $tx) {
         continue;
     }
 
-    $d = datetoa2($tx['time']);
+    $d = Yii::$app->ConversionUtils->datetoa2($tx['time']);
     echo '<td><b>' . $d . '</b></td>';
 
     $eta = '';
@@ -504,9 +504,11 @@ foreach ($txs_array as $tx) {
     echo '<td width="280">';
     if (isset($tx['address'])) {
         $address = $tx['address'];
-        $exists  = dboscalar("SELECT count(*) AS nb FROM accounts WHERE username=:address", array(
-            ':address' => $address
-        ));
+        $exists  = (new \yii\db\Query())
+				->select(['count(*) AS nb'])
+				->from('accounts')
+				->where(['username' => $address])
+				->scalar();
         if ($exists)
             echo CHtml::link($address, '/?address=' . $address);
         else

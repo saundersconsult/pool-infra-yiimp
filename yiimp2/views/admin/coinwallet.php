@@ -21,7 +21,7 @@ if (!empty($coin->algo) && $coin->algo != 'PoS')
 	Yii::$app->session->set('yaamp-algo', $coin->algo);
 
 $remote = new WalletRPC($coin);
-$info = $remote->getinfo();
+$info = ($remote)? $remote->getinfo() : false;
 
 $sellamount = $coin->balance;
 //if ($info) $sellamount = floatval($sellamount) - arraySafeVal($info, "paytxfee") * 3;

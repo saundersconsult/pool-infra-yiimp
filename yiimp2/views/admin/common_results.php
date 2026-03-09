@@ -495,7 +495,7 @@ foreach($list as $market)
 	echo '<tr style="background-color: '.$algo_color.';">';
 
 	echo '<td><img width="16px" src="'.$coin->image.'"></td>';
-	echo '<td><b><a href="/admin/coin?id='.$coin->id.'">'.$coin->name.' ('.$coin->symbol.')</a></b></td>';
+	echo '<td><b><a href="/admin/coinwallet?id='.$coin->id.'">'.$coin->name.' ('.$coin->symbol.')</a></b></td>';
 
 	echo '<td><b><a href="'.$marketurl.'" target="_blank">'.$market->name.'</a></b></td>';
 

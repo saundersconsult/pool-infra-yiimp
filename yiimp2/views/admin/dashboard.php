@@ -18,11 +18,6 @@ echo Yii::$app->ViewUtils->getAdminSideBarLinks();
 <br><a href='/admin/coincreate'><img width=16 src=''><b>CREATE COIN</b></a>
 <br><a href='/admin/updateprice'><img width=16 src=''><b>UPDATE PRICE</b></a>
 
-<br><br><br><br><br><br><br><br><br><br>
-<br><br><br><br><br><br><br><br><br><br>
-<br><br><br><br><br><br><br><br><br><br>
-<br><br><br><br><br><br><br><br><br><br>
-
 <script type="text/javascript">
 
 $(function()
@@ -215,6 +210,3 @@ function graph_init_negative(data)
 
 
 </script>
-
-
-
