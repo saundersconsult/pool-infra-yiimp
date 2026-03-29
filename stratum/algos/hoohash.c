@@ -218,13 +218,13 @@ static void HoohashMatrixMultiplication(double mat[64][64], const uint8_t *hashB
 // For Bitcoin-derived blockchain PoW, we hash the entire (80-byte) block header
 // BUT - for the matrix, so there is only one per Tip to solve, we zero the nonce
 
-void hoohash_hash(const void* data, size_t len, uint32_t output[HOOHASH_HASH_SIZE])
+static void hoohash_hash_impl(const void* data, size_t len, uint8_t* out32)
 {
     // Enforce the preimage definition: header bytes from nVersion..nNonce (80 bytes).
     // This prevents accidental consensus changes if callers pass a different length.
     if (len != 80) {
         // Zero output buffer on error to ensure deterministic behavior
-        memset(output, 0, HOOHASH_HASH_SIZE);
+        memset(out32, 0, HOOHASH_HASH_SIZE);
         return;
     }
 
@@ -261,5 +261,10 @@ void hoohash_hash(const void* data, size_t len, uint32_t output[HOOHASH_HASH_SIZ
     // Perform matrix multiplication using:
     // - firstPass derived from the full header (nonce-dependent)
     // - mat derived from masked header (nonce-independent)
-    HoohashMatrixMultiplication(mat, firstPass, output, nonce);
+    HoohashMatrixMultiplication(mat, firstPass, out32, nonce);
+}
+
+void hoohash_hash(const char* input, char* output, uint32_t len)
+{
+    hoohash_hash_impl(input, (size_t)len, (uint8_t*)output);
 }

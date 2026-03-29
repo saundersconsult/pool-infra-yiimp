@@ -10,7 +10,6 @@
 #define HOOHASH_H
 
 #include <stdint.h>
-#include <stddef.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -19,11 +18,8 @@ extern "C" {
 // Define the size of the hash domain
 #define HOOHASH_HASH_SIZE 32
 
-// Compute HoohashV110 on arbitrary data
-// data: input data pointer
-// len: length of input data in bytes
-// output: output buffer (must be at least 32 bytes)
-void hoohash_hash(const void* data, size_t len, uint32_t output[HOOHASH_HASH_SIZE]);
+// Stratum / YAAMP: binary hash into output (32 bytes)
+void hoohash_hash(const char* input, char* output, uint32_t len);
 
 #ifdef __cplusplus
 }
