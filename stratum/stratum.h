@@ -273,6 +273,7 @@ void sha3d_hash_hex(const char *input, char *output, unsigned int len);
 #include "algos/lyra2z330.h"
 #include "algos/gr.h"
 #include "algos/heavyhash/heavyhash.h"
+#include "algos/hoohash.h"
 #include "algos/anime.h"
 #include "algos/cosa.h"
 #include "algos/minotaurx.h"
