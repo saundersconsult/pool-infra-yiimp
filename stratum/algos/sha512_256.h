@@ -41,7 +41,7 @@
 #define SHA512_BLOCK_SIZE  (1024 / 8)
 
 #define SHFR(x, n)    (x >> n)
-#define ROTR(x, n)   ((x >> n) | (x << ((sizeof(x) << 3) - n)))
+#define ROTR_SIZEOF(x, n)   ((x >> n) | (x << ((sizeof(x) << 3) - n)))
 #define CH(x, y, z)  ((x & y) ^ (~x & z))
 #define MAJ(x, y, z) ((x & y) ^ (x & z) ^ (y & z))
 

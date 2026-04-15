@@ -134,12 +134,20 @@ void decode_nbits(uint256& target_, unsigned int nbits);
 
 //////////////////////////////////////////////////////////////////////////
 
-#ifndef max
-#define max(a,b)            (((a) > (b)) ? (a) : (b))
+#ifndef yaamp_max
+#define yaamp_max(a,b)            (((a) > (b)) ? (a) : (b))
 #endif
 
-#ifndef min
-#define min(a,b)            (((a) < (b)) ? (a) : (b))
+#ifndef yaamp_min
+#define yaamp_min(a,b)            (((a) < (b)) ? (a) : (b))
+#endif
+
+#ifndef MIN
+#define MIN(a,b)                  (((a) < (b)) ? (a) : (b))
+#endif
+
+#ifndef MAX
+#define MAX(a,b)                  (((a) > (b)) ? (a) : (b))
 #endif
 
 //////////////////////////////////////////////////////////////////////////
