@@ -20,7 +20,7 @@ SOURCES=lyra2re.c lyra2v2.c Lyra2.c lyra2z.c lyra2z330.c Lyra2-z.c Sponge.c alli
 	yespower/yespower-platform.c yespower/yespower-combined.c sha256-P.c yespower/yespower-blake2b.c yespower/crypto/blake2b-yp.c \
 	a5a.c a5amath.c m7m.c magimath.cpp velvet.c \
 	blake2/blake2b.c blake2-ref/blake2b.c blake2-ref/blake2s.c ar2/argon2.c ar2/core.c ar2/encoding.c ar2/opt.c ar2/thread.c \
-	hive.c pomelo.c hex.c argon2d.c geek.c bcd.c balloon.c \
+	hive.c pomelo.c hex.c argon2d.c geek.c bcd.c balloon.c hoohash.c \
 	phi.c phi2.c phi5.c polytimos.c rainforest.c renesis.c skunk.c sib.c veltor.c gost.c aergo.c x22i.c x21s.c lbk3.c pipehash.c dedal.c x20r.c gltalgos.c lane.c x25x.c \
 	beenode.c honeycomb/facet_one.c honeycomb/facet_two.c honeycomb/facet_three.c honeycomb/facet_four.c honeycomb/facet_five.c honeycomb/facet_six.c honeycomb/facets_helper.c \
 	gr.c cryptonote/crypto/aesb.c  cryptonote/crypto/c_blake256.c  cryptonote/crypto/c_groestl.c  cryptonote/crypto/c_jh.c \
