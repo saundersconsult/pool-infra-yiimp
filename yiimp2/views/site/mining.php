@@ -6,225 +6,185 @@ $height = '240px';
 
 $this->registerJsFile('@web/js/auto_refresh.js', ['depends' => [yii\web\JqueryAsset::className()]]);
 
-// fixes
-$algo = Yii::$app->session->get('yaamp-algo');
+$algo      = Yii::$app->session->get('yaamp-algo');
+$homeUrl   = Yii::$app->homeUrl;
+$algoUnit  = 'Mh';
+$algoFactor = Yii::$app->YiimpUtils->algo_mBTC_factor($algo);
+if ($algoFactor == 0.001)       $algoUnit = 'Kh';
+if ($algoFactor == 1000)        $algoUnit = 'Gh';
+if ($algoFactor == 1000000)     $algoUnit = 'Th';
+if ($algoFactor == 1000000000)  $algoUnit = 'Ph';
 
 ?>
+<style>
+/*
+ * Two-column layout: Bootstrap row/col replaces the old <table> so that
+ * column widths are well-defined before jqplot draws its canvases.
+ * The overflow guards prevent any chart overflow from pushing sibling columns.
+ */
+.mining-col        { min-width: 0; }   /* critical: lets flex children shrink */
+.graph-wrap        { overflow: hidden; width: 100%; }
+.graph-wrap canvas { max-width: 100% !important; }
 
-<div id='resume_update_button' style='color: #444; background-color: #ffd; border: 1px solid #eea;
-	padding: 10px; margin-left: 20px; margin-right: 20px; margin-top: 15px; cursor: pointer; display: none;'
-	onclick='auto_page_resume();' align=center>
-<b>Auto refresh is paused - Click to resume</b></div>
+/* jqplot internal elements must not escape their wrapper */
+.jqplot-target     { overflow: hidden !important; }
 
-<table cellspacing=20 width=100%>
-<tr><td valign=top width=50%>
+.main-left-box     { margin-bottom: 1rem; }
+</style>
 
-<div id='mining_results'>
+<!-- "Auto refresh paused" banner -->
+<div id="resume_update_button"
+     style="color:#444;background:#ffd;border:1px solid #eea;padding:10px;
+            margin:15px 20px;cursor:pointer;display:none;"
+     onclick="auto_page_resume()" align="center">
+    <b>Auto refresh is paused — click to resume</b>
 </div>
 
-<?php
-if($algo != 'all')
-echo <<<end
-<div class="main-left-box">
-<div class="main-left-title">Last 24 Hours Estimate ($algo)</div>
-<div class="main-left-inner"><br>
-<div id='graph_results_price' style='height: $height;'></div><br>
-</div></div><br>
+<!-- Two-column layout via Bootstrap grid -->
+<div class="row gx-4 mt-2">
 
-<div class="main-left-box">
-<div class="main-left-title">Last 24 Hours Hashrate ($algo)</div>
-<div class="main-left-inner"><br>
-<div id='pool_hashrate_results' style='height: $height;'></div><br>
-</div></div><br>
-end;
+    <!-- LEFT: algo mining table + graphs -->
+    <div class="col-12 col-md-6 mining-col">
 
-$algo_unit = 'Mh';
-$algo_factor = Yii::$app->YiimpUtils->algo_mBTC_factor($algo);
-if ($algo_factor == 0.001) $algo_unit = 'Kh';
-if ($algo_factor == 1000) $algo_unit = 'Gh';
-if ($algo_factor == 1000000) $algo_unit = 'Th';
-if ($algo_factor == 1000000000) $algo_unit = 'Ph';
+        <div id="mining_results"></div>
 
-$homeUrl = Yii::$app->homeUrl;
-echo <<<end
-</td><td valign=top>
+        <?php if ($algo !== 'all'): ?>
 
-<div id='pool_current_results'>
-</div>
+        <div class="main-left-box">
+            <div class="main-left-title">Last 24 Hours Estimate (<?= htmlspecialchars($algo) ?>)</div>
+            <div class="main-left-inner">
+                <div class="graph-wrap">
+                    <div id="graph_results_price" style="height:<?= $height ?>"></div>
+                </div>
+            </div>
+        </div>
 
-<div id='found_results'>
-</div>
+        <div class="main-left-box">
+            <div class="main-left-title">Last 24 Hours Hashrate (<?= htmlspecialchars($algo) ?>)</div>
+            <div class="main-left-inner">
+                <div class="graph-wrap">
+                    <div id="pool_hashrate_results" style="height:<?= $height ?>"></div>
+                </div>
+            </div>
+        </div>
 
-</td></tr></table>
+        <?php endif ?>
 
+    </div><!-- /col left -->
+
+    <!-- RIGHT: pool status + recent blocks -->
+    <div class="col-12 col-md-6 mining-col" style="overflow-x:auto;">
+        <div id="pool_current_results"></div>
+        <div id="found_results"></div>
+    </div>
+
+</div><!-- /row -->
 
 <script>
+var global_algo  = '<?= addslashes($algo) ?>';
+var querystring  = global_algo ? '?algo=' + global_algo : '';
 
-var global_algo = '$algo';
-var querystring = '?algo=$algo';
-if (querystring=='?algo=') querystring = '';
+/* Store plot references so we can replot on window resize */
+var _plotPrice    = null;
+var _plotHashrate = null;
 
 function select_algo(algo)
 {
-	window.location.href = '{$homeUrl}site/algo?algo='+algo+'&r={$homeUrl}site/mining';
+    window.location.href = '<?= $homeUrl ?>site/algo?algo=' + algo + '&r=<?= $homeUrl ?>site/mining';
 }
 
 function page_refresh()
 {
-	pool_current_refresh();
-	mining_refresh();
-	found_refresh();
+    pool_current_refresh();
+    mining_refresh();
+    found_refresh();
 
-	if(global_algo != 'all')
-	{
-		pool_hashrate_refresh();
-		main_refresh_price();
-	}
+    if (global_algo !== 'all') {
+        pool_hashrate_refresh();
+        main_refresh_price();
+    }
 }
 
-////////////////////////////////////////////////////
-
-function pool_current_ready(data)
-{
-	$('#pool_current_results').html(data);
-}
-
+/* ── pool current ─────────────────────────────────────────────── */
 function pool_current_refresh()
 {
-	var url = "{$homeUrl}site/current_results"+querystring;
-	$.get(url, '', pool_current_ready);
+    $.get('<?= $homeUrl ?>site/current_results' + querystring, '', function(data) {
+        $('#pool_current_results').html(data);
+    });
 }
 
-////////////////////////////////////////////////////
-
-function mining_ready(data)
-{
-	$('#mining_results').html(data);
-}
-
+/* ── mining algo list ─────────────────────────────────────────── */
 function mining_refresh()
 {
-	var url = "{$homeUrl}site/mining_results"+querystring;
-	$.get(url, '', mining_ready);
+    $.get('<?= $homeUrl ?>site/mining_results' + querystring, '', function(data) {
+        $('#mining_results').html(data);
+    });
 }
 
-////////////////////////////////////////////////////
-
-function found_ready(data)
-{
-	$('#found_results').html(data);
-}
-
+/* ── found blocks ─────────────────────────────────────────────── */
 function found_refresh()
 {
-	var url = "{$homeUrl}site/found_results"+querystring;
-	$.get(url, '', found_ready);
+    $.get('<?= $homeUrl ?>site/found_results' + querystring, '', function(data) {
+        $('#found_results').html(data);
+    });
 }
 
-///////////////////////////////////////////////////////////////////////
-
-function main_ready_price(data)
-{
-	graph_init_price(data);
-}
-
+/* ── 24h estimate graph ───────────────────────────────────────── */
 function main_refresh_price()
 {
-	var url = "{$homeUrl}site/graph_price_results"+querystring;
-	$.get(url, '', main_ready_price);
+    $.get('<?= $homeUrl ?>site/graph_price_results' + querystring, '', function(data) {
+        $('#graph_results_price').empty();
+        try {
+            _plotPrice = $.jqplot('graph_results_price', $.parseJSON(data), {
+                title: '<b>Estimate (mBTC/<?= $algoUnit ?>/day)</b>',
+                axes: {
+                    xaxis: {
+                        tickInterval: 7200,
+                        renderer: $.jqplot.DateAxisRenderer,
+                        tickOptions: { formatString: '<font size=1>%#Hh</font>' }
+                    },
+                    yaxis: {
+                        min: 0,
+                        tickOptions: { formatString: '<font size=1>%#.3f &nbsp;</font>' }
+                    }
+                },
+                seriesDefaults: { markerOptions: { style: 'none' } },
+                grid: { borderWidth: 1, shadowWidth: 0, shadowDepth: 0, background: '#ffffff' }
+            });
+        } catch(e) { /* data not ready yet */ }
+    });
 }
 
-function graph_init_price(data)
-{
-	$('#graph_results_price').empty();
-
-	var t = $.parseJSON(data);
-	var plot1 = $.jqplot('graph_results_price', t,
-	{
-		title: '<b>Estimate (mBTC/{$algo_unit}/day)</b>',
-		axes: {
-			xaxis: {
-				tickInterval: 7200,
-				renderer: $.jqplot.DateAxisRenderer,
-				tickOptions: {formatString: '<font size=1>%#Hh</font>'}
-			},
-			yaxis: {
-				min: 0,
-				tickOptions: {formatString: '<font size=1>%#.3f &nbsp;</font>'}
-			}
-		},
-
-		seriesDefaults:
-		{
-			markerOptions: { style: 'none' }
-		},
-
-		grid:
-		{
-			borderWidth: 1,
-			shadowWidth: 0,
-			shadowDepth: 0,
-			background: '#ffffff'
-		},
-
-	});
-}
-
-///////////////////////////////////////////////////////////////////////
-
-function pool_hashrate_ready(data)
-{
-	pool_hashrate_graph_init(data);
-}
-
+/* ── 24h hashrate graph ───────────────────────────────────────── */
 function pool_hashrate_refresh()
 {
-	var url = "{$homeUrl}site/graph_hashrate_results"+querystring;
-	$.get(url, '', pool_hashrate_ready);
+    $.get('<?= $homeUrl ?>site/graph_hashrate_results' + querystring, '', function(data) {
+        $('#pool_hashrate_results').empty();
+        try {
+            _plotHashrate = $.jqplot('pool_hashrate_results', $.parseJSON(data), {
+                title: '<b>Pool Hashrate (<?= $algoUnit ?>/s)</b>',
+                axes: {
+                    xaxis: {
+                        tickInterval: 7200,
+                        renderer: $.jqplot.DateAxisRenderer,
+                        tickOptions: { formatString: '<font size=1>%#Hh</font>' }
+                    },
+                    yaxis: {
+                        min: 0,
+                        tickOptions: { formatString: '<font size=1>%#.3f &nbsp;</font>' }
+                    }
+                },
+                seriesDefaults: { markerOptions: { style: 'none' } },
+                grid: { borderWidth: 1, shadowWidth: 0, shadowDepth: 0, background: '#ffffff' },
+                highlighter: { show: true }
+            });
+        } catch(e) { /* data not ready yet */ }
+    });
 }
 
-function pool_hashrate_graph_init(data)
-{
-	$('#pool_hashrate_results').empty();
-
-	var t = $.parseJSON(data);
-	var plot1 = $.jqplot('pool_hashrate_results', t,
-	{
-		title: '<b>Pool Hashrate ($algo_unit/s)</b>',
-		axes: {
-			xaxis: {
-				tickInterval: 7200,
-				renderer: $.jqplot.DateAxisRenderer,
-				tickOptions: {formatString: '<font size=1>%#Hh</font>'}
-			},
-			yaxis: {
-				min: 0,
-				tickOptions: {formatString: '<font size=1>%#.3f &nbsp;</font>'}
-			}
-		},
-
-		seriesDefaults:
-		{
-			markerOptions: { style: 'none' }
-		},
-
-		grid:
-		{
-			borderWidth: 1,
-			shadowWidth: 0,
-			shadowDepth: 0,
-			background: '#ffffff'
-		},
-
-		highlighter:
-		{
-			show: true
-		},
-
-	});
-}
-
+/* Replot on window resize so graphs fill their column correctly */
+$(window).on('resize', function() {
+    if (_plotPrice)    { try { _plotPrice.replot();    } catch(e) {} }
+    if (_plotHashrate) { try { _plotHashrate.replot(); } catch(e) {} }
+});
 </script>
-
-
-end;

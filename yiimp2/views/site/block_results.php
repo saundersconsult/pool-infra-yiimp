@@ -99,7 +99,7 @@ foreach($db_blocks as $db_block)
 //	$db_block->confirmations = $blockext['confirmations'];
 //	$db_block->save();
 
-	$d = datetoa2($db_block->time);
+	$d = Yii::$app->ConversionUtils->datetoa2($db_block->time);
 	echo '<td data="'.$db_block->time.'"><b>'.$d.' ago</b></td>';
 	echo '<td>'.$coin->createExplorerLink($db_block->height, array('height'=>$db_block->height)).'</td>';
 	echo '<td>'.$db_block->amount.'</td>';

@@ -107,7 +107,7 @@ class ViewUtils extends Component
 				$html .= ' || '.Html::a("<b>CONSOLE</b>", '/admin/coinwallet_console?id='.$coin->id);
 			$html .= ' || '.Html::a("<b>TRIGGERS</b>", '/admin/cointriggers?id='.$coin->id);
 			if ($src != 'wallet')
-				$html .= ' || '.Html::a("<b>{$coin->symbol}</b>", '/admin/coin?id='.$coin->id);
+				$html .= ' || '.Html::a("<b>{$coin->symbol}</b>", '/admin/coinwallet?id='.$coin->id);
 		}
 
 		if(!$info && $coin->enable)

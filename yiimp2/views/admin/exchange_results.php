@@ -29,8 +29,8 @@ foreach($orders as $order)
 {
 	$coin = Coins::findone(['id' => $order->coinid]);
 
-	$marketurl = getMarketUrl($coin, $order->market);
-	$coinimg = CHtml::image($coin->image, $coin->symbol, array('width'=>'16'));
+	$marketurl = Yii::$app->YiimpUtils->getMarketUrl($coin, $order->market);
+	$coinimg = \yii\helpers\Html::img(\yii\helpers\Html::encode($coin->image), ['alt' => \yii\helpers\Html::encode($coin->symbol), 'width' => 16]);
 
 	echo "<tr class='ssrow'>";
 
@@ -99,7 +99,7 @@ foreach($exchanges_deposits as $exchange_deposit)
 	$coin = Coins::findOne(['id' => $exchange_deposit->coinid]);
 
 	$lowsymbol = strtolower($coin->symbol);
-	$coinimg = CHtml::image($coin->image, $coin->symbol, array('width'=>'16'));
+	$coinimg = \yii\helpers\Html::img(\yii\helpers\Html::encode($coin->image), ['alt' => \yii\helpers\Html::encode($coin->symbol), 'width' => 16]);
 
 	$marketurl = getMarketUrl($coin, $exchange_deposit->market);
 

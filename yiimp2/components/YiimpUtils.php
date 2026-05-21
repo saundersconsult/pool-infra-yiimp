@@ -589,46 +589,62 @@ class YiimpUtils extends Component
 
 	public function worker_rate($workerid, $algo=null)
 	{
-		if(!$algo) $algo = Yii::$app->session->get('yaamp-algo');
+		if (!$algo) $algo = Yii::$app->session->get('yaamp-algo');
 
-		$target = $this->hashrate_constant($algo);
+		$target   = $this->hashrate_constant($algo);
 		$interval = $this->hashrate_step();
-		$delay = time()-$interval;
+		$delay    = time() - $interval;
 
-		$rate = controller()->memcache->get_database_scalar("yaamp_worker_rate-$workerid-$algo",
-			"SELECT (sum(difficulty) * $target / $interval / 1000) FROM shares WHERE valid AND time>$delay AND workerid=".$workerid);
-
-		return $rate;
+		$cacheKey = "yaamp_worker_rate-{$workerid}-{$algo}";
+		$rate = Yii::$app->cache->get($cacheKey);
+		if ($rate === false) {
+			$rate = Yii::$app->db->createCommand(
+				"SELECT SUM(difficulty) * :target / :interval / 1000
+				 FROM shares WHERE valid=1 AND time > :delay AND workerid = :wid",
+				[':target' => $target, ':interval' => $interval, ':delay' => $delay, ':wid' => $workerid]
+			)->queryScalar();
+			Yii::$app->cache->set($cacheKey, $rate, 60);
+		}
+		return (float) $rate;
 	}
 
 	public function worker_rate_bad($workerid, $algo=null)
 	{
-		if(!$algo) $algo = Yii::$app->session->get('yaamp-algo');
+		if (!$algo) $algo = Yii::$app->session->get('yaamp-algo');
 
-		$target = $this->hashrate_constant($algo);
+		$target   = $this->hashrate_constant($algo);
 		$interval = $this->hashrate_step();
-		$delay = time()-$interval;
+		$delay    = time() - $interval;
 
-		$diff = (double) controller()->memcache->get_database_scalar("yaamp_worker_diff_avg-$workerid-$algo",
-			"SELECT avg(difficulty) FROM shares WHERE valid AND time>$delay AND workerid=".$workerid);
+		// Average difficulty of valid shares — used to weight the invalid-share count
+		$diff = (float) Yii::$app->db->createCommand(
+			"SELECT AVG(difficulty) FROM shares WHERE valid=1 AND time > :delay AND workerid = :wid",
+			[':delay' => $delay, ':wid' => $workerid]
+		)->queryScalar();
 
-		$rate = controller()->memcache->get_database_scalar("yaamp_worker_rate_bad-$workerid-$algo",
-			"SELECT ((count(id) * $diff) * $target / $interval / 1000) FROM shares WHERE valid!=1 AND time>$delay AND workerid=".$workerid);
+		if (!$diff) return 0.0;
 
-		return empty($rate)? 0: $rate;
+		$rate = (float) Yii::$app->db->createCommand(
+			"SELECT COUNT(id) * :diff * :target / :interval / 1000
+			 FROM shares WHERE valid != 1 AND time > :delay AND workerid = :wid",
+			[':diff' => $diff, ':target' => $target, ':interval' => $interval,
+			 ':delay' => $delay, ':wid' => $workerid]
+		)->queryScalar();
+
+		return $rate ?: 0.0;
 	}
 
 	public function worker_shares_bad($workerid, $algo=null)
 	{
-		if(!$algo) $algo = Yii::$app->session->get('yaamp-algo');
+		if (!$algo) $algo = Yii::$app->session->get('yaamp-algo');
 
 		$interval = $this->hashrate_step();
-		$delay = time()-$interval;
+		$delay    = time() - $interval;
 
-		$rate = (int) controller()->memcache->get_database_scalar("yaamp_worker_shares_bad-$workerid-$algo",
-			"SELECT count(id) FROM shares WHERE valid!=1 AND time>$delay AND workerid=".$workerid);
-
-		return $rate;
+		return (int) Yii::$app->db->createCommand(
+			"SELECT COUNT(id) FROM shares WHERE valid != 1 AND time > :delay AND workerid = :wid",
+			[':delay' => $delay, ':wid' => $workerid]
+		)->queryScalar();
 	}
 
 	public function coin_rate($coinid)

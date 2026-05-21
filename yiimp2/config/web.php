@@ -36,7 +36,7 @@ else {
 $config = [
     'id' => 'basic',
     'basePath' => dirname(__DIR__),
-    'bootstrap' => ['log'],
+    'bootstrap' => ['log', 'queue'],
     'aliases' => [
         '@bower' => '@vendor/bower-asset',
         '@npm'   => '@vendor/npm-asset',
@@ -71,7 +71,17 @@ $config = [
             ],
         ],
         'db' => $db,
-        
+        'queue' => [
+            'class'     => \yii\queue\db\Queue::class,
+            'db'        => 'db',
+            'tableName' => '{{%queue}}',
+            'channel'   => 'default',
+            'mutex'     => \yii\mutex\MysqlMutex::class,
+        ],
+        'mutex' => [
+            'class' => \yii\mutex\MysqlMutex::class,
+        ],
+
         'urlManager' => [
             'enablePrettyUrl' => true,
             'showScriptName' => false,

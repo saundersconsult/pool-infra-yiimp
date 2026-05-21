@@ -107,8 +107,8 @@ foreach($versions as $item)
 	$bad = ($hashrate+$invalid)? round($invalid*100/($hashrate+$invalid), 1).'%': '';
 	if (!$bad || $bad == '0%') $bad = '-';
 	$avg = intval($count) ? $hashrate / intval($count) : '';
-	$avg = $avg? Itoa2($avg).'H/s': '';
-	$hashrate = $hashrate? Itoa2($hashrate).'H/s': '';
+	$avg = $avg? Yii::$app->ConversionUtils->Itoa2($avg).'H/s': '';
+	$hashrate = $hashrate? Yii::$app->ConversionUtils->Itoa2($hashrate).'H/s': '';
 	$version = substr($version, 0, 30);
 
 	echo '<tr class="ssrow">';
@@ -143,8 +143,8 @@ foreach($error_tab as $i=>$s)
 }
 
 $bad = ($total_hashrate+$total_invalid) && $total_invalid ? round($total_invalid*100/($total_hashrate+$total_invalid), 1).'%': '';
-$avg = intval($total_workers) ? Itoa2($total_hashrate / intval($total_workers)).'H/s' : '';
-$total_hashrate = Itoa2($total_hashrate).'H/s';
+$avg = intval($total_workers) ? Yii::$app->ConversionUtils->Itoa2($total_hashrate / intval($total_workers)).'H/s' : '';
+$total_hashrate = Yii::$app->ConversionUtils->Itoa2($total_hashrate).'H/s';
 
 echo '<tr class="ssrow">';
 echo '<th><b>Total</b></th>';

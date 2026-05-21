@@ -142,11 +142,96 @@ class AdminController extends Controller
 	}
 
     /////////////////////////////////////////////////
+    /* version breakdown */
+
+    public function actionVersion(): string
+    {
+        $this->requireAdmin();
+        return $this->render('version');
+    }
+
+    public function actionVersion_results(): string
+    {
+        $this->requireAdmin();
+        $algo = Yii::$app->request->get('algo', '');
+        if ($algo !== '') {
+            Yii::$app->session->set('yaamp-algo', $algo);
+        }
+        return $this->renderPartial('version_results');
+    }
+
+    /////////////////////////////////////////////////
+    /* worker list */
+
+    public function actionWorker(): string
+    {
+        $this->requireAdmin();
+        return $this->render('worker');
+    }
+
+    public function actionWorker_results(): string
+    {
+        $this->requireAdmin();
+        $algo = Yii::$app->request->get('algo', '');
+        if ($algo !== '') {
+            Yii::$app->session->set('yaamp-algo', $algo);
+        }
+        return $this->renderPartial('worker_results');
+    }
+
+    /////////////////////////////////////////////////
+    /* user list */
+
+    public function actionUser(): string
+    {
+        $this->requireAdmin();
+        return $this->render('user');
+    }
+
+    public function actionUser_results(): string
+    {
+        $this->requireAdmin();
+        return $this->renderPartial('user_results');
+    }
+
+    /////////////////////////////////////////////////
     /* coin list and information */
 
     public function actionCoinlist()
 	{
-		return $this->render('coinlist');
+		$search   = trim(Yii::$app->request->get('q', ''));
+		$pageSize = max(10, min(500, (int) Yii::$app->request->get('pageSize', 50)));
+
+		$query = Coins::find()->orderBy(['created' => SORT_DESC]);
+
+		if ($search !== '') {
+			$query->andWhere(['or',
+				['like', 'name',   $search],
+				['like', 'symbol', $search],
+				['like', 'algo',   $search],
+			]);
+		}
+
+		// Compute totals over the full filtered set before the provider adds LIMIT
+		$totalInstalled = (clone $query)->andWhere(['installed' => 1])->count();
+		$totalActive    = (clone $query)->andWhere(['enable'    => 1])->count();
+
+		$provider = new \yii\data\ActiveDataProvider([
+			'query'      => $query,
+			'pagination' => [
+				'pageSize'      => $pageSize,
+				'pageSizeParam' => 'pageSize',
+			],
+			'sort' => false,
+		]);
+
+		return $this->render('coinlist', [
+			'provider'       => $provider,
+			'totalInstalled' => (int) $totalInstalled,
+			'totalActive'    => (int) $totalActive,
+			'searchQuery'    => $search,
+			'pageSize'       => $pageSize,
+		]);
 	}
 
 	public function actionCoin_create()
@@ -278,6 +363,83 @@ class AdminController extends Controller
 	}
 
     /////////////////////////////////////////////////
+    /* monsters — anomaly / high-activity user list */
+
+    public function actionMonsters(): string
+    {
+        $this->requireAdmin();
+        return $this->render('monsters');
+    }
+
+    /////////////////////////////////////////////////
+    /* payments list */
+
+    public function actionPayments(): string
+    {
+        $this->requireAdmin();
+        return $this->render('payments');
+    }
+
+    public function actionPayments_results(): string
+    {
+        $this->requireAdmin();
+        return $this->renderPartial('payments_results');
+    }
+
+    /** Restore a single user's failed payouts (no tx) to their balance. */
+    public function actionCancelUserPayment(): \yii\web\Response
+    {
+        $this->requireAdmin();
+        $id   = (int) Yii::$app->request->get('id');
+        $user = \app\models\Accounts::findOne($id);
+        if ($user) {
+            (new \app\services\PaymentService())->cancelFailedPayment($user->id);
+        }
+        return $this->goBack();
+    }
+
+    /** Restore all failed payouts within 48 h for a coin back to user balances. */
+    public function actionCancelUsersPayment(): \yii\web\Response
+    {
+        $this->requireAdmin();
+        $id   = (int) Yii::$app->request->get('id');
+        $coin = \app\models\Coins::findOne($id);
+
+        if (!$coin) {
+            Yii::$app->session->setFlash('error', 'Invalid coin id!');
+            return $this->goBack();
+        }
+
+        $since   = time() - 48 * 3600;
+        $failed  = \app\models\Payouts::find()
+            ->where(['idcoin' => $coin->id])
+            ->andWhere(['or', ['tx' => null], ['tx' => '']])
+            ->andWhere(['>', 'time', $since])
+            ->all();
+
+        $totalAmount = 0.0;
+        $count       = 0;
+
+        foreach ($failed as $payout) {
+            $user = \app\models\Accounts::findOne((int) $payout->account_id);
+            if ($user) {
+                $user->balance += (float) $payout->amount;
+                if ($user->save()) {
+                    $totalAmount += (float) $payout->amount;
+                    $count++;
+                }
+            }
+            $payout->delete();
+        }
+
+        $msg = $count
+            ? "Restored {$count} failed tx(s) to user balances: {$totalAmount} {$coin->symbol}"
+            : 'No failed txs found';
+        Yii::$app->session->setFlash('success', $msg);
+        return $this->goBack();
+    }
+
+    /////////////////////////////////////////////////
 
 	public function actionExchange()
 	{
@@ -307,5 +469,141 @@ class AdminController extends Controller
 		return $this->renderPartial('connections_results');
 	}
 
+	/////////////////////////////////////////////////
+	/* coin peer management */
+
+	public function actionCoinpeers()
+	{
+		$this->requireAdmin();
+		$id   = (int) Yii::$app->request->get('id');
+		$coin = Coins::findOne($id);
+		if (!$coin) {
+			return $this->goBack();
+		}
+		return $this->render('coin_peers', ['coin' => $coin]);
+	}
+
+	public function actionCoinpeerRemove()
+	{
+		$this->requireAdmin();
+		$id   = (int) Yii::$app->request->get('id');
+		$node = Yii::$app->request->get('node', '');
+		$coin = Coins::findOne($id);
+
+		if ($coin && $node) {
+			$remote = new WalletRPC($coin);
+			if ($coin->rpcencoding === 'DCR') {
+				$res = $remote->node('disconnect', $node);
+				if (!$res) {
+					$remote->node('remove', $node);
+				}
+			} else {
+				$res = $remote->addnode($node, 'remove');
+				if (!$res && $remote->error) {
+					Yii::$app->session->setFlash('error', "{$node} {$remote->error}");
+				}
+			}
+		}
+
+		return $this->redirect(Yii::$app->request->referrer ?: ['coinpeers', 'id' => $id]);
+	}
+
+	public function actionCoinpeerAdd()
+	{
+		$this->requireAdmin();
+		if (!Yii::$app->request->isPost) {
+			return $this->goBack();
+		}
+		$id   = (int) Yii::$app->request->get('id');
+		$node = trim(Yii::$app->request->post('node', ''));
+		$coin = Coins::findOne($id);
+
+		if ($coin && $node) {
+			$remote = new WalletRPC($coin);
+			if ($coin->rpcencoding === 'DCR') {
+				$remote->addnode($node, 'add');
+				usleep(500_000);
+				$remote->node('connect', $node);
+				sleep(1);
+			} else {
+				$res = $remote->addnode($node, 'add');
+				if (!$res && $remote->error) {
+					Yii::$app->session->setFlash('error', "{$node} {$remote->error}");
+				} else {
+					sleep(1);
+				}
+			}
+		}
+
+		return $this->redirect(['coinpeers', 'id' => $id]);
+	}
+
+	/////////////////////////////////////////////////
+	/* botnets — accounts mining from an abnormally high number of distinct IPs */
+
+	public function actionBotnets(): string
+	{
+		$this->requireAdmin();
+		return $this->render('botnets');
+	}
+
+	public function actionLoguser(): \yii\web\Response
+	{
+		$this->requireAdmin();
+		$id   = (int) Yii::$app->request->get('id');
+		$en   = (int) Yii::$app->request->get('en', 0);
+		$user = \app\models\Accounts::findOne($id);
+		if ($user) {
+			$user->logtraffic = $en;
+			$user->save();
+		}
+		return $this->goBack();
+	}
+
+	public function actionBlockuser(): \yii\web\Response
+	{
+		$this->requireAdmin();
+		$wallet = trim((string) Yii::$app->request->get('wallet', ''));
+		$user   = \app\models\Accounts::find()->where(['username' => $wallet])->one();
+		if ($user) {
+			$user->is_locked = true;
+			$user->save();
+		}
+		return $this->goBack();
+	}
+
+	public function actionUnblockuser(): \yii\web\Response
+	{
+		$this->requireAdmin();
+		$wallet = trim((string) Yii::$app->request->get('wallet', ''));
+		$user   = \app\models\Accounts::find()->where(['username' => $wallet])->one();
+		if ($user) {
+			$user->is_locked = false;
+			$user->save();
+		}
+		return $this->goBack();
+	}
+
+	public function actionBanuser(): \yii\web\Response
+	{
+		$this->requireAdmin();
+		$id   = (int) Yii::$app->request->get('id');
+		$user = \app\models\Accounts::findOne($id);
+		if ($user) {
+			$user->is_locked = true;
+			$user->balance   = 0;
+			$user->save();
+		}
+		return $this->goBack();
+	}
+
+	/** Abort with 403 if the current user is not an admin. */
+	private function requireAdmin(): void
+	{
+		$identity = Yii::$app->user->identity;
+		if (!$identity || !$identity->is_admin) {
+			throw new \yii\web\ForbiddenHttpException();
+		}
+	}
 
 }

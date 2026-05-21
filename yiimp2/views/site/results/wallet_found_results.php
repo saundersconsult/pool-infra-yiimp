@@ -102,10 +102,10 @@ foreach($db_blocks as $db_block)
 	echo '&nbsp;('.$coin->algo.')'.$flags.'</td>';
 
 
-	$d = datetoa2($db_block->time);
+	$d = Yii::$app->ConversionUtils->datetoa2($db_block->time);
 	echo '<td>'.$coin->createExplorerLink($db_block->height, array('height'=>$db_block->height)).'</td>';
 	echo '<td>'.$db_block->amount.'</td>';
-	echo '<td>'.round_difficulty($db_block->difficulty).'</td>';
+	echo '<td>'.Yii::$app->ConversionUtils->round_difficulty($db_block->difficulty).'</td>';
 	echo '<td data="'.$db_block->time.'"><b>'.$d.' ago</b></td>';
 
 	if ($db_block->effort)	

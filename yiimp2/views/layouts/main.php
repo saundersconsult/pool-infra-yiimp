@@ -60,8 +60,10 @@ $this->registerLinkTag(['rel' => 'icon', 'type' => 'image/x-icon', 'href' => Yii
         $admin_navbar = [
             '&nbsp;&nbsp;&nbsp;&nbsp;',
             ['label' => 'Dashboard', 'url' => ['/admin/dashboard']],
-            ['label' => 'Wallets', 'url' => ['/admin/coinwallets']],
-            ['label' => 'Coins', 'url' => ['/admin/coinlist']],
+            ['label' => 'Wallets',   'url' => ['/admin/coinwallets']],
+            ['label' => 'Coins',     'url' => ['/admin/coinlist']],
+            ['label' => 'Jobs',      'url' => ['/jobs/index'],
+             'active' => \Yii::$app->controller->id === 'jobs'],
              '<li class="nav-item">'
                     . Html::beginForm(['/admin/logout'])
                     . Html::submitButton(

@@ -32,7 +32,7 @@ foreach($res as $i=>$n)
 {
 	if(!$n['hashrate']) continue;
 
-	$m = bitcoinvaluetoa($n['earnings'] * $algo_unit_factor * 1000000 / $n['hashrate']);
+	$m = Yii::$app->ConversionUtils->bitcoinvaluetoa($n['earnings'] * $algo_unit_factor * 1000000 / $n['hashrate']);
 	$d = date('Y-m-d H:i:s', $i);
 
 	if($started) echo ',';

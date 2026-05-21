@@ -510,7 +510,7 @@ foreach ($txs_array as $tx) {
 				->where(['username' => $address])
 				->scalar();
         if ($exists)
-            echo CHtml::link($address, '/?address=' . $address);
+            echo \yii\helpers\Html::a(\yii\helpers\Html::encode($address), '/?address=' . urlencode($address));
         else
             echo $address . '<br>';
     }

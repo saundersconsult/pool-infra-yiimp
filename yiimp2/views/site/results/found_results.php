@@ -101,13 +101,13 @@ EOT;
 
 foreach($db_blocks as $db_block)
 {
-	$d = datetoa2($db_block->time);
+	$d = Yii::$app->ConversionUtils->datetoa2($db_block->time);
 	if(!$db_block->coin_id)
 	{
 		if (!$showrental)
 			continue;
 
-		$reward = bitcoinvaluetoa($db_block->amount);
+		$reward = Yii::$app->ConversionUtils->bitcoinvaluetoa($db_block->amount);
 
 		echo '<tr class="ssrow">';
 		echo '<td width="18px"><img width="16px" src="/images/btc.png"/></td>';
@@ -126,7 +126,7 @@ foreach($db_blocks as $db_block)
 
 	$reward = round($db_block->amount, 3);
 	$coin = $db_block->coin ? $db_block->coin : getdbo('db_coins', $db_block->coin_id);
-	$difficulty = Itoa2($db_block->difficulty, 3);
+	$difficulty = Yii::$app->ConversionUtils->Itoa2($db_block->difficulty, 3);
 	$height = number_format($db_block->height, 0, '.', ' ');
 
 	$link = $coin->createExplorerLink($coin->name, array('hash'=>$db_block->blockhash));
