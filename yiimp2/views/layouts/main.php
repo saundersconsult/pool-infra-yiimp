@@ -14,7 +14,7 @@ use app\models\Mining;
 
 AppAsset::register($this);
 
-$pageTitle = empty($this->title) ? YAAMP_SITE_NAME : YAAMP_SITE_NAME." - ".$this->title;
+$pageTitle = empty($this->title) ? YIIMP_SITE_NAME : YIIMP_SITE_NAME." - ".$this->title;
 
 $this->registerCsrfMetaTags();
 $this->registerMetaTag(['charset' => Yii::$app->charset], 'charset');
@@ -36,14 +36,14 @@ $this->registerLinkTag(['rel' => 'icon', 'type' => 'image/x-icon', 'href' => Yii
 <header id="header">
     <?php
     NavBar::begin([
-        'brandLabel' => YAAMP_SITE_NAME,
+        'brandLabel' => YIIMP_SITE_NAME,
         'brandUrl' => Yii::$app->homeUrl,
         'options' => ['class' => 'navbar-expand-md navbar-dark bg-dark fixed-top']
     ]);
 
     $mining = Mining::find()->one();
-	$nextpayment = date('H:i T', $mining->last_payout+YAAMP_PAYMENTS_FREQ);
-	$eta = ($mining->last_payout+YAAMP_PAYMENTS_FREQ) - time();
+	$nextpayment = date('H:i T', $mining->last_payout+YIIMP_PAYMENTS_FREQ);
+	$eta = ($mining->last_payout+YIIMP_PAYMENTS_FREQ) - time();
 	$eta_mn = 'in '.round($eta / 60).' minutes';
 
     $items_navbar = [
@@ -104,7 +104,7 @@ $this->registerLinkTag(['rel' => 'icon', 'type' => 'image/x-icon', 'href' => Yii
 <footer id="footer" class="mt-auto py-3 bg-light">
     <div class="container">
         <div class="row text-muted">
-            <div class="text-center">&copy; <?php echo date('Y').' '.YAAMP_SITE_NAME ?> - <a href="https://github.com/tpfuemp/yiimp">Open source Project</a></p></div>
+            <div class="text-center">&copy; <?php echo date('Y').' '.YIIMP_SITE_NAME ?> - <a href="https://github.com/tpfuemp/yiimp">Open source Project</a></p></div>
         </div>
     </div>
 </footer>

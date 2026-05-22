@@ -11,7 +11,7 @@ echo Yii::$app->ViewUtils->getAdminSideBarLinks();
 <a href='/admin/memcached'>Memcache</a>&nbsp;
 <a href='/admin/connections'>Connections</a>&nbsp;
 
-<?php if (defined('YAAMP_RENTAL') && YAAMP_RENTAL): ?>
+<?php if (defined('YIIMP_RENTAL') && YIIMP_RENTAL): ?>
 <a href='/renting/admin'>Rental</a>&nbsp;
 <?php endif ?>
 

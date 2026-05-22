@@ -20,7 +20,7 @@ class TradingJob extends BaseJob
 
     protected function perform(): void
     {
-        if (!defined('YAAMP_PRODUCTION') || !YAAMP_PRODUCTION) {
+        if (!defined('YIIMP_PRODUCTION') || !YIIMP_PRODUCTION) {
             return;
         }
         // TODO: (new \app\services\MarketService())->doTrading();

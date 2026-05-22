@@ -17,7 +17,7 @@ use app\models\Workers;
 
 $mining = Mining::find()->one();
 
-$showrental = (bool) YAAMP_RENTAL;
+$showrental = (bool) YIIMP_RENTAL;
 
 echo <<<END
 <style type="text/css">
@@ -323,7 +323,7 @@ echo '</tr>';
 // ----------------------------------------------------------------------------------------------------
 
 echo '<tr class="ssrow"><td>orders</td>';
-if (YAAMP_ALLOW_EXCHANGE) {
+if (YIIMP_ALLOW_EXCHANGE) {
 	// auto-exchange mode
 	foreach($markets as $market) {
 		$exchange = $market->name;
@@ -695,7 +695,7 @@ $immature = Yii::$app->ConversionUtils->bitcoinvaluetoa($immature);
 $mints = Yii::$app->ConversionUtils->bitcoinvaluetoa($mints);
 $off = Yii::$app->ConversionUtils->bitcoinvaluetoa($off);
 
-$btcaddr = YAAMP_BTCADDRESS;
+$btcaddr = YIIMP_BTCADDRESS;
 
 echo '<a href="https://www.bitstamp.net/markets/btc/usd/" target="_blank">Bitstamp '.$mining->usdbtc.'</a>, ';
 echo '<a href="https://blockchain.info/address/'.$btcaddr.'" target="_blank">wallet '.$btc->balance.'</a>, next payout '.$topay2.'<br/>';

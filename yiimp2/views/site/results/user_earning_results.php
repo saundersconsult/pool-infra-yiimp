@@ -54,7 +54,7 @@ span.block.cleared  { color: white; background-color: gray; }
 </thead>
 EOT;
 
-$showrental = (bool) YAAMP_RENTAL;
+$showrental = (bool) YIIMP_RENTAL;
 
 foreach($earnings as $earning)
 {
@@ -115,7 +115,7 @@ foreach($earnings as $earning)
 	}
 
 	else if($earning->status == 1)
-		echo '<span class="block exchange">'.(YAAMP_ALLOW_EXCHANGE ? 'Exchange' : 'Confirmed').'</span>';
+		echo '<span class="block exchange">'.(YIIMP_ALLOW_EXCHANGE ? 'Exchange' : 'Confirmed').'</span>';
 
 	else if($earning->status == 2)
 		echo '<span class="block cleared">Cleared</span>';

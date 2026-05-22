@@ -117,7 +117,7 @@ class NotificationService
                     $vars
                 );
 
-                $dest = defined('YAAMP_ADMIN_EMAIL') ? YAAMP_ADMIN_EMAIL : (Yii::$app->params['adminEmail'] ?? '');
+                $dest = defined('YIIMP_ADMIN_EMAIL') ? YIIMP_ADMIN_EMAIL : (Yii::$app->params['adminEmail'] ?? '');
                 if (!empty($rule->notifycmd) && str_contains((string) $rule->notifycmd, '@')) {
                     $dest = $rule->notifycmd;
                 }

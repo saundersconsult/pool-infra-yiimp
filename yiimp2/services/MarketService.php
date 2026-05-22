@@ -87,7 +87,7 @@ class MarketService
             ])
             ->all();
 
-        $exchangeFee = defined('YAAMP_FEES_EXCHANGE') ? (float) YAAMP_FEES_EXCHANGE : 2.0;
+        $exchangeFee = defined('YIIMP_FEES_EXCHANGE') ? (float) YIIMP_FEES_EXCHANGE : 2.0;
 
         foreach ($coins as $coin) {
             if ($coin->symbol === 'BTC') {

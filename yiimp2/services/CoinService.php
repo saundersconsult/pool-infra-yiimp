@@ -13,9 +13,9 @@ use app\components\rpc\WalletRPC;
  *   web/yaamp/core/backend/coins.php → updateCoinStats, updateVersionFromGithub
  *
  * External utility methods used (already in Yii2 components):
- *   Yii::$app->YiimpUtils->get_algos()       ← yaamp_get_algos()
- *   Yii::$app->YiimpUtils->pool_rate($algo)  ← yaamp_pool_rate()
- *   Yii::$app->YiimpUtils->coin_nethash($c)  ← yaamp_coin_nethash()
+ *   Yii::$app->YiimpUtils->get_algos()       ← YIIMP_get_algos()
+ *   Yii::$app->YiimpUtils->pool_rate($algo)  ← YIIMP_pool_rate()
+ *   Yii::$app->YiimpUtils->coin_nethash($c)  ← YIIMP_coin_nethash()
  *   Yii::$app->ConversionUtils->decode_compact()  ← decode_compact()
  *   Yii::$app->ConversionUtils->target_to_diff()  ← target_to_diff()
  */
@@ -238,7 +238,7 @@ class CoinService
                 $data        = @file_get_contents($coin->image);
                 $localPath   = "/images/coin-{$coin->id}.png";
                 $coin->image = $localPath;
-                $htdocs      = defined('YAAMP_HTDOCS') ? YAAMP_HTDOCS : '';
+                $htdocs      = defined('YIIMP_HTDOCS') ? YIIMP_HTDOCS : '';
                 if ($data && $htdocs) {
                     @unlink($htdocs . $localPath);
                     file_put_contents($htdocs . $localPath, $data);
@@ -326,7 +326,7 @@ class CoinService
 
         if ($mailText !== '') {
             Yii::info($mailText, __CLASS__);
-            $admin = defined('YAAMP_ADMIN_EMAIL') ? YAAMP_ADMIN_EMAIL : (Yii::$app->params['adminEmail'] ?? '');
+            $admin = defined('YIIMP_ADMIN_EMAIL') ? YIIMP_ADMIN_EMAIL : (Yii::$app->params['adminEmail'] ?? '');
             if ($admin) {
                 try {
                     Yii::$app->mailer->compose()
@@ -767,7 +767,7 @@ class CoinService
 
     /**
      * Upsert a market record for a coin/exchange pair, and optionally create
-     * the coin itself when YAAMP_CREATE_NEW_COINS is enabled.
+     * the coin itself when YIIMP_CREATE_NEW_COINS is enabled.
      * Ports: updateRawCoin()
      */
     private function updateRawCoin(
@@ -781,7 +781,7 @@ class CoinService
         }
 
         $coin = Coins::find()->where(['symbol' => $symbol])->one();
-        $createNew = defined('YAAMP_CREATE_NEW_COINS') && YAAMP_CREATE_NEW_COINS;
+        $createNew = defined('YIIMP_CREATE_NEW_COINS') && YIIMP_CREATE_NEW_COINS;
 
         if (!$coin && $createNew) {
             // Skip high-noise exchanges that would pollute the DB

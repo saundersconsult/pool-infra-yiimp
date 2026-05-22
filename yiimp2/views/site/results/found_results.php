@@ -11,7 +11,7 @@ function WriteBoxHeader($title)
 	echo "<div class='main-left-inner'>";
 }
 
-$showrental = (bool) YAAMP_RENTAL;
+$showrental = (bool) YIIMP_RENTAL;
 
 // Ability to pass ?algo=all or ?algo=x16s,neoscrypt from URL
 $algo_from_query_param = Yii::$app->YiimpUtils->get_algo_param();

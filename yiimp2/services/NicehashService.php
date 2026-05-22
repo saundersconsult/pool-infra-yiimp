@@ -19,14 +19,14 @@ use app\models\Renters;
  * Updated to NiceHash REST API v2 (api2.nicehash.com/main/api/v2/).
  *
  * Required serverconfig.php constants (v2):
- *   YAAMP_USE_NICEHASH_API  — bool, enables this service
+ *   YIIMP_USE_NICEHASH_API  — bool, enables this service
  *   NICEHASH_API_KEY        — string, API key UUID from NiceHash account settings
  *   NICEHASH_API_SECRET     — string, secret key for HMAC-SHA256 signing
  *   NICEHASH_ORG_ID         — string, organization ID UUID
  *   NICEHASH_DEPOSIT        — string, pool worker username / payout address
  *   NICEHASH_DEPOSIT_AMOUNT — float,  BTC per order (e.g. 0.01)
  *   NICEHASH_MARKET         — string, optional — 'EU' | 'EU_N' | 'USA' | 'USA_E' (default: 'EU')
- *   NICEHASH_POOL_HOST      — string, optional — stratum hostname (default: YAAMP_SITE_NAME)
+ *   NICEHASH_POOL_HOST      — string, optional — stratum hostname (default: YIIMP_SITE_NAME)
  */
 class NicehashService
 {
@@ -117,7 +117,7 @@ class NicehashService
      */
     public function syncAll(): void
     {
-        if (!defined('YAAMP_USE_NICEHASH_API') || !YAAMP_USE_NICEHASH_API) {
+        if (!defined('YIIMP_USE_NICEHASH_API') || !YIIMP_USE_NICEHASH_API) {
             return;
         }
         $this->syncPrices();
@@ -370,7 +370,7 @@ class NicehashService
 
         $deposit  = defined('NICEHASH_DEPOSIT')   ? NICEHASH_DEPOSIT   : '';
         $poolHost = defined('NICEHASH_POOL_HOST')  ? NICEHASH_POOL_HOST
-            : (defined('YAAMP_SITE_NAME') ? YAAMP_SITE_NAME : 'localhost');
+            : (defined('YIIMP_SITE_NAME') ? YIIMP_SITE_NAME : 'localhost');
         $poolPort = (int) Yii::$app->YiimpUtils->getAlgoPort($poolAlgo);
 
         // Check existing pools first

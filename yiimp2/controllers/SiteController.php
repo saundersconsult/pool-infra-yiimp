@@ -89,15 +89,15 @@ class SiteController extends Controller
 
     /**
      * OpenAPI 3.0 specification served as JSON — consumed by Swagger UI.
-     * Dynamically includes rental endpoints when YAAMP_RENTAL is enabled.
+     * Dynamically includes rental endpoints when YIIMP_RENTAL is enabled.
      */
     public function actionApiSpec(): Response
     {
-        $baseUrl       = 'http://' . (defined('YIIMP_API_URL') ? YIIMP_API_URL : Yii::$app->request->hostName);
-        $hasRental     = defined('YAAMP_RENTAL')             && YAAMP_RENTAL;
+        $baseUrl       = 'http://' . (defined('YIIMP_SITE_URL') ? YIIMP_SITE_URL : Yii::$app->request->hostName);
+        $hasRental     = defined('YIIMP_RENTAL')             && YIIMP_RENTAL;
         $hasPayouts    = defined('YIIMP_API_PAYOUTS')        && YIIMP_API_PAYOUTS;
         $payoutHours   = defined('YIIMP_API_PAYOUTS_PERIOD') ? (int) (YIIMP_API_PAYOUTS_PERIOD / 3600) : 24;
-        $siteName      = defined('YAAMP_SITE_NAME')          ? YAAMP_SITE_NAME : 'Yiimp';
+        $siteName      = defined('YIIMP_SITE_NAME')          ? YIIMP_SITE_NAME : 'Yiimp';
 
         // ── Reusable response schemas ─────────────────────────────────────────
         $schemas = [
@@ -473,12 +473,12 @@ class SiteController extends Controller
 			$coin = Coins::find()->where(['id'=>$user->coinid])->one();
 
             if($coin)
-				return "$balance $coin->symbol - ".YAAMP_SITE_NAME;
+				return "$balance $coin->symbol - ".YIIMP_SITE_NAME;
 			else
-				return "$balance - ".YAAMP_SITE_NAME;
+				return "$balance - ".YIIMP_SITE_NAME;
 		}
 		else
-			return YAAMP_SITE_URL;
+			return YIIMP_SITE_URL;
 	}
 
     /////////////////////////////////////////////////

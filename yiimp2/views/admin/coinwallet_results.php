@@ -159,7 +159,7 @@ foreach($coins as $coin)
 	$price = Yii::$app->ConversionUtils->bitcoinvaluetoa($coin->price);
 	$price2 = Yii::$app->ConversionUtils->bitcoinvaluetoa($coin->price2);
 
-	if($coin->dontsell && YAAMP_ALLOW_EXCHANGE)
+	if($coin->dontsell && YIIMP_ALLOW_EXCHANGE)
 		echo "<td align=right style='font-size: .9em; background-color: #ffaaaa'>$price<br>$price2</td>";
 	else
 		echo "<td align=right style='font-size: .9em'>$price<br>$price2</td>";

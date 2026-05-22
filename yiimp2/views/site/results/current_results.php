@@ -211,7 +211,7 @@ foreach ($algos as $item)
             if ($auto_exchange != 1) echo "<td align='center' valign='top' style='font-size: .8em;'><img width=13 src='/images/cancel.png'></td>";
             else echo "<td align='center' valign='top' style='font-size: .8em;'><img width=13 src='/images/ok.png'></td>";
 			
-			$min_payout = max(floatval(YAAMP_PAYMENTS_MINI), floatval($coin->payout_min));
+			$min_payout = max(floatval(YIIMP_PAYMENTS_MINI), floatval($coin->payout_min));
 			echo "<td align='center' style='font-size: .8em;'><b>".$min_payout." $symbol</b></td>";
 
 			if ($port_count >= 1) 

@@ -62,7 +62,7 @@ class PaymentService
         }
 
         $txfee      = (float) $coin->txfee;
-        $paymentMin = defined('YAAMP_PAYMENTS_MINI') ? (float) YAAMP_PAYMENTS_MINI : 0.0001;
+        $paymentMin = defined('YIIMP_PAYMENTS_MINI') ? (float) YIIMP_PAYMENTS_MINI : 0.0001;
         $minPayout  = max($paymentMin, (float) $coin->payout_min, $txfee);
 
         // Sunday evening: reduce minimum to clear smaller balances
@@ -215,7 +215,7 @@ class PaymentService
         set_time_limit(120);
 
         $account = $coin->account ?? '';
-        $siteName = defined('YAAMP_SITE_NAME') ? YAAMP_SITE_NAME : 'Yiimp';
+        $siteName = defined('YIIMP_SITE_NAME') ? YIIMP_SITE_NAME : 'Yiimp';
         $tx       = $coin->txmessage
             ? $remote->sendmany($account, $addresses, 1, $siteName)
             : $remote->sendmany($account, $addresses);
@@ -394,8 +394,8 @@ class PaymentService
             return;
         }
 
-        $paymentFreq = defined('YAAMP_PAYMENTS_FREQ') ? (int) YAAMP_PAYMENTS_FREQ : 14400;
-        $delay = defined('YAAMP_ALLOW_EXCHANGE') && YAAMP_ALLOW_EXCHANGE
+        $paymentFreq = defined('YIIMP_PAYMENTS_FREQ') ? (int) YIIMP_PAYMENTS_FREQ : 14400;
+        $delay = defined('YIIMP_ALLOW_EXCHANGE') && YIIMP_ALLOW_EXCHANGE
             ? time() - $paymentFreq
             : time() - (int) ($paymentFreq / 2);
 
@@ -426,7 +426,7 @@ class PaymentService
             $value = $this->convertAmountForUser($coin, (float) $earning->amount, $user);
 
             // coinid=6 is BTC; skip if exchange not allowed
-            if ($user->coinid == 6 && !(defined('YAAMP_ALLOW_EXCHANGE') && YAAMP_ALLOW_EXCHANGE)) {
+            if ($user->coinid == 6 && !(defined('YIIMP_ALLOW_EXCHANGE') && YIIMP_ALLOW_EXCHANGE)) {
                 continue;
             }
 
@@ -456,8 +456,8 @@ class PaymentService
             $ext     = '.gz';
         }
 
-        $host = defined('YAAMP_DBHOST') ? YAAMP_DBHOST : '';
-        $db   = defined('YAAMP_DBNAME') ? YAAMP_DBNAME : '';
+        $host = defined('YIIMP_DBHOST') ? YIIMP_DBHOST : '';
+        $db   = defined('YIIMP_DBNAME') ? YIIMP_DBNAME : '';
         $user = YIIMP_MYSQLDUMP_USER;
         $pass = YIIMP_MYSQLDUMP_PASS;
 
@@ -686,7 +686,7 @@ class PaymentService
 
     /**
      * Convert a mined amount to the user's preferred coin value.
-     * Inline port of yaamp_convert_amount_user() from web/yaamp/core/functions/yaamp.php.
+     * Inline port of YIIMP_convert_amount_user() from web/yaamp/core/functions/yaamp.php.
      */
     private function convertAmountForUser(Coins $coin, float $amount, object $user): float
     {
@@ -694,7 +694,7 @@ class PaymentService
             return $amount;
         }
 
-        $allowExchange = defined('YAAMP_ALLOW_EXCHANGE') && YAAMP_ALLOW_EXCHANGE;
+        $allowExchange = defined('YIIMP_ALLOW_EXCHANGE') && YIIMP_ALLOW_EXCHANGE;
         $refCoin       = Coins::findOne((int) $user->coinid);
 
         if ($allowExchange) {
@@ -728,7 +728,7 @@ class PaymentService
      */
     private function sendAlert(string $subject, string $body): void
     {
-        $admin = defined('YAAMP_ADMIN_EMAIL') ? YAAMP_ADMIN_EMAIL : (Yii::$app->params['adminEmail'] ?? '');
+        $admin = defined('YIIMP_ADMIN_EMAIL') ? YIIMP_ADMIN_EMAIL : (Yii::$app->params['adminEmail'] ?? '');
         if (empty($admin)) {
             return;
         }

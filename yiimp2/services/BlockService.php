@@ -714,7 +714,7 @@ class BlockService
 
             $txid  = $transaction['txid'];
             $txUrl = "https://blockchain.info/tx/{$txid}";
-            $admin = defined('YAAMP_ADMIN_EMAIL') ? YAAMP_ADMIN_EMAIL : (Yii::$app->params['adminEmail'] ?? '');
+            $admin = defined('YIIMP_ADMIN_EMAIL') ? YIIMP_ADMIN_EMAIL : (Yii::$app->params['adminEmail'] ?? '');
 
             Yii::info("BTC withdrawal detected: {$transaction['amount']} to {$transaction['address']}", __CLASS__);
 
@@ -766,36 +766,36 @@ class BlockService
 
     /**
      * Return the configured mining fee percentage for an algorithm.
-     * Reads YAAMP_FEES_MINING (defined in serverconfig.php) and caches the result.
+     * Reads YIIMP_FEES_MINING (defined in serverconfig.php) and caches the result.
      *
      * TODO: extend to read per-algo overrides from params or DB (port of $configFixedPoolFees).
      */
     private function getMiningFeePercent(string $algo): float
     {
-        $cacheKey = "yaamp_fee_{$algo}";
+        $cacheKey = "YIIMP_fee_{$algo}";
         $cached   = Yii::$app->cache->get($cacheKey);
         if ($cached !== false) {
             return (float) $cached;
         }
-        $fee = defined('YAAMP_FEES_MINING') ? (float) YAAMP_FEES_MINING : 0.5;
+        $fee = defined('YIIMP_FEES_MINING') ? (float) YIIMP_FEES_MINING : 0.5;
         Yii::$app->cache->set($cacheKey, $fee, 3600);
         return $fee;
     }
 
     /**
      * Return the configured solo mining fee percentage.
-     * Reads YAAMP_FEES_SOLO (defined in serverconfig.php).
+     * Reads YIIMP_FEES_SOLO (defined in serverconfig.php).
      *
      * TODO: extend to read per-algo solo overrides ($configFixedPoolFeesSolo).
      */
     private function getSoloFeePercent(string $algo): float
     {
-        $cacheKey = "yaamp_fee_solo_{$algo}";
+        $cacheKey = "YIIMP_fee_solo_{$algo}";
         $cached   = Yii::$app->cache->get($cacheKey);
         if ($cached !== false) {
             return (float) $cached;
         }
-        $fee = defined('YAAMP_FEES_SOLO') ? (float) YAAMP_FEES_SOLO : 1.0;
+        $fee = defined('YIIMP_FEES_SOLO') ? (float) YIIMP_FEES_SOLO : 1.0;
         Yii::$app->cache->set($cacheKey, $fee, 3600);
         return $fee;
     }
@@ -818,6 +818,6 @@ class BlockService
 
     private function allowExchange(): bool
     {
-        return defined('YAAMP_ALLOW_EXCHANGE') ? (bool) YAAMP_ALLOW_EXCHANGE : false;
+        return defined('YIIMP_ALLOW_EXCHANGE') ? (bool) YIIMP_ALLOW_EXCHANGE : false;
     }
 }

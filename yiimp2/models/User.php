@@ -14,8 +14,8 @@ class User extends \yii\base\BaseObject implements \yii\web\IdentityInterface
     private static $users = [
         '100' => [
             'id' => '100',
-            'username' => YAAMP_ADMIN_USER,
-            'password' => YAAMP_ADMIN_PASS,
+            'username' => YIIMP_ADMIN_USER,
+            'password' => YIIMP_ADMIN_PASS,
             'is_admin' => true,
             'authKey' => 'test100key', // currently unused
             'accessToken' => '100-token', // currently unused

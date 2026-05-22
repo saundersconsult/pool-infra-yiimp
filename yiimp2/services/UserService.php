@@ -31,7 +31,7 @@ class UserService
             ->andWhere(['not', ['coinsymbol' => '']])
             ->all();
 
-        $allowExchange = defined('YAAMP_ALLOW_EXCHANGE') && YAAMP_ALLOW_EXCHANGE;
+        $allowExchange = defined('YIIMP_ALLOW_EXCHANGE') && YIIMP_ALLOW_EXCHANGE;
 
         foreach ($users as $user) {
             $oldUserCoinId = $user->coinid;

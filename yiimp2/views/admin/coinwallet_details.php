@@ -46,7 +46,7 @@ if (!empty($coin->symbol2))
     $symbol = $coin->symbol2;
 
 echo "<br/>";
-if (YAAMP_ALLOW_EXCHANGE) {
+if (YIIMP_ALLOW_EXCHANGE) {
     $subquery = (new \yii\db\Query())
 				->select(['id'])
 				->from('accounts')
@@ -121,7 +121,7 @@ foreach ($list as $market) {
     if (!empty($market->deposit_address)) {
         $name = \yii\helpers\Json::encode($market->name);
         $addr = \yii\helpers\Json::encode($market->deposit_address);
-        echo Html::a(YAAMP_ALLOW_EXCHANGE ? "sell" : "send", "javascript:;", array(
+        echo Html::a(YIIMP_ALLOW_EXCHANGE ? "sell" : "send", "javascript:;", array(
             'onclick' => "return showSellAmountDialog($name, $addr, {$market->id});"
         ));
         echo ' ' . $market->deposit_address;

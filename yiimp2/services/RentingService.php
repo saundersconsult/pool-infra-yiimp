@@ -38,7 +38,7 @@ class RentingService
         $db   = Yii::$app->db;
         $util = Yii::$app->YiimpUtils;
 
-        if (!defined('YAAMP_RENTAL') || !YAAMP_RENTAL) {
+        if (!defined('YIIMP_RENTAL') || !YIIMP_RENTAL) {
             $db->createCommand("UPDATE jobs SET active=false, ready=false")->execute();
             return;
         }
@@ -61,7 +61,7 @@ class RentingService
             )->execute();
         }
 
-        $feesRenting = defined('YAAMP_FEES_RENTING') ? (float) YAAMP_FEES_RENTING : 2.0;
+        $feesRenting = defined('YIIMP_FEES_RENTING') ? (float) YIIMP_FEES_RENTING : 2.0;
 
         $submits = JobSubmits::find()->where(['status' => 0])->all();
         foreach ($submits as $submit) {
@@ -118,7 +118,7 @@ class RentingService
     {
         $db          = Yii::$app->db;
         $util        = Yii::$app->YiimpUtils;
-        $feesRenting = defined('YAAMP_FEES_RENTING') ? (float) YAAMP_FEES_RENTING : 2.0;
+        $feesRenting = defined('YIIMP_FEES_RENTING') ? (float) YIIMP_FEES_RENTING : 2.0;
         $totalCleared = 0.0;
 
         foreach ($util->get_algos() as $algo) {
@@ -256,7 +256,7 @@ class RentingService
             return;
         }
 
-        $txFeeWd = defined('YAAMP_TXFEE_RENTING_WD') ? (float) YAAMP_TXFEE_RENTING_WD : 0.002;
+        $txFeeWd = defined('YIIMP_TXFEE_RENTING_WD') ? (float) YIIMP_TXFEE_RENTING_WD : 0.002;
 
         // Confirmed deposits
         $accounts = $remote->listaccounts(1);
@@ -372,6 +372,6 @@ class RentingService
 
     private function miningFeePercent(string $algo): float
     {
-        return defined('YAAMP_FEES_MINING') ? (float) YAAMP_FEES_MINING : 0.5;
+        return defined('YIIMP_FEES_MINING') ? (float) YIIMP_FEES_MINING : 0.5;
     }
 }

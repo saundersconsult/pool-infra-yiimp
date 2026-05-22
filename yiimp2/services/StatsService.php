@@ -96,8 +96,8 @@ class StatsService
         $step = 15;
         $tm   = (int) (floor($now / ($step * 60)) * $step * 60);
 
-        $feesRenting   = defined('YAAMP_FEES_RENTING') ? (float) YAAMP_FEES_RENTING : 2.0;
-        $limitEstimate = defined('YAAMP_LIMIT_ESTIMATE') && YAAMP_LIMIT_ESTIMATE;
+        $feesRenting   = defined('YIIMP_FEES_RENTING') ? (float) YIIMP_FEES_RENTING : 2.0;
+        $limitEstimate = defined('YIIMP_LIMIT_ESTIMATE') && YIIMP_LIMIT_ESTIMATE;
 
         foreach ($util->get_algos() as $algo) {
             $stats = Hashrate::find()->where(['time' => $tm, 'algo' => $algo])->one();
@@ -391,12 +391,12 @@ class StatsService
 
     /**
      * Sum the pending earnings value (converted to user's coin) for a user.
-     * Inline port of yaamp_convert_earnings_user() from web/yaamp/core/functions/yaamp.php.
+     * Inline port of YIIMP_convert_earnings_user() from web/yaamp/core/functions/yaamp.php.
      */
     private function convertEarningsForUser(object $user, string $statusCondition): float
     {
         $db    = Yii::$app->db;
-        $allow = defined('YAAMP_ALLOW_EXCHANGE') && YAAMP_ALLOW_EXCHANGE;
+        $allow = defined('YIIMP_ALLOW_EXCHANGE') && YIIMP_ALLOW_EXCHANGE;
 
         $refCoin = $user->coinid ? Coins::findOne((int) $user->coinid) : null;
         if (!$refCoin && $allow) {
@@ -432,9 +432,9 @@ class StatsService
 
     private function hashrateConstant(string $algo): float
     {
-        // yaamp_hashrate_constant() from web/yaamp/core/functions/yaamp.php
-        if (function_exists('yaamp_hashrate_constant')) {
-            return (float) yaamp_hashrate_constant($algo);
+        // YIIMP_hashrate_constant() from web/yaamp/core/functions/yaamp.php
+        if (function_exists('YIIMP_hashrate_constant')) {
+            return (float) YIIMP_hashrate_constant($algo);
         }
         return in_array($algo, ['equihash','equihash96','equihash125','equihash144','equihash192'], true)
             ? 0x0000000004000000
@@ -443,17 +443,17 @@ class StatsService
 
     private function hashrateStep(): float
     {
-        // yaamp_hashrate_step() — typically returns the shares window in seconds
-        if (function_exists('yaamp_hashrate_step')) {
-            return (float) yaamp_hashrate_step();
+        // YIIMP_hashrate_step() — typically returns the shares window in seconds
+        if (function_exists('YIIMP_hashrate_step')) {
+            return (float) YIIMP_hashrate_step();
         }
         return 900.0; // 15-minute default
     }
 
     private function userRate(int $userId, string $algo): float
     {
-        if (function_exists('yaamp_user_rate')) {
-            return (float) yaamp_user_rate($userId, $algo);
+        if (function_exists('YIIMP_user_rate')) {
+            return (float) YIIMP_user_rate($userId, $algo);
         }
         // Fallback: compute directly from shares
         $t = time() - 5 * 60;
@@ -466,8 +466,8 @@ class StatsService
 
     private function userRateBad(int $userId, string $algo): float
     {
-        if (function_exists('yaamp_user_rate_bad')) {
-            return (float) yaamp_user_rate_bad($userId, $algo);
+        if (function_exists('YIIMP_user_rate_bad')) {
+            return (float) YIIMP_user_rate_bad($userId, $algo);
         }
         $t = time() - 5 * 60;
         $diff = (float) Yii::$app->db->createCommand(
@@ -479,8 +479,8 @@ class StatsService
 
     private function jobRate(int $jobId): float
     {
-        if (function_exists('yaamp_job_rate')) {
-            return (float) yaamp_job_rate($jobId);
+        if (function_exists('YIIMP_job_rate')) {
+            return (float) YIIMP_job_rate($jobId);
         }
         $t = time() - 5 * 60;
         $diff = (float) Yii::$app->db->createCommand(
@@ -492,8 +492,8 @@ class StatsService
 
     private function jobRateBad(int $jobId): float
     {
-        if (function_exists('yaamp_job_rate_bad')) {
-            return (float) yaamp_job_rate_bad($jobId);
+        if (function_exists('YIIMP_job_rate_bad')) {
+            return (float) YIIMP_job_rate_bad($jobId);
         }
         return 0.0;
     }

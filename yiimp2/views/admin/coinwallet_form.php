@@ -324,7 +324,7 @@ if(empty($coin->rpcuser))
 	$coin->rpcuser = 'yiimprpc';
 // generate a random password
 if(empty($coin->rpcpasswd))
-	$coin->rpcpasswd = preg_replace("|[^\w]|m",'',base64_encode(pack("H*",md5("".time().YAAMP_SITE_URL))));
+	$coin->rpcpasswd = preg_replace("|[^\w]|m",'',base64_encode(pack("H*",md5("".time().YIIMP_SITE_URL))));
 
 $port = Yii::$app->YiimpUtils->getAlgoPort($coin->algo);
 $dedport = $coin->dedicatedport;
@@ -425,11 +425,11 @@ $tab_daemon =
 	"daemon=1\n".
 	"gen=0\n".
 	"\n".
-	"alertnotify=%s | mail -s \"{$coin->name} alert!\" ".YAAMP_ADMIN_EMAIL."\n".
+	"alertnotify=%s | mail -s \"{$coin->name} alert!\" ".YIIMP_ADMIN_EMAIL."\n".
 	((empty($coin->dedicatedport))?
-        "blocknotify=/var/stratum/blocknotify ".YAAMP_STRATUM_URL.":$port {$coin->id} %s\n"
+        "blocknotify=/var/stratum/blocknotify ".YIIMP_STRATUM_URL.":$port {$coin->id} %s\n"
 		:
-		"blocknotify=/var/stratum/blocknotify ".YAAMP_STRATUM_URL.":$dedport {$coin->id} %s\n"
+		"blocknotify=/var/stratum/blocknotify ".YIIMP_STRATUM_URL.":$dedport {$coin->id} %s\n"
 	).
     " \n".
     Html::endTag("pre").
@@ -439,9 +439,9 @@ $tab_daemon =
 	Html::beginTag("pre").
 	"-a {$coin->algo} ".
 	((empty($coin->dedicatedport))?
-		"-o stratum+tcp://" . YAAMP_STRATUM_URL . ':' . $port . ' '
+		"-o stratum+tcp://" . YIIMP_STRATUM_URL . ':' . $port . ' '
 		:
-		"-o stratum+tcp://" . YAAMP_STRATUM_URL . ':' . $dedport . ' ').
+		"-o stratum+tcp://" . YIIMP_STRATUM_URL . ':' . $dedport . ' ').
     "-u {$coin->master_wallet} ".
 	"-p c={$coin->symbol} ".
 	"\n".

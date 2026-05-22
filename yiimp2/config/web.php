@@ -2,6 +2,7 @@
 
 // include serverconfig
 require_once('/etc/yiimp/serverconfig.php');
+require_once(__DIR__ . '/constants.php');   // promote YAAMP_* → YIIMP_* if serverconfig is old
 
 if (defined('YIIMP_DEBUG') && (YIIMP_DEBUG === true)) {
     define('YII_DEBUG', true);
@@ -86,6 +87,13 @@ $config = [
             'enablePrettyUrl' => true,
             'showScriptName' => false,
             'rules' => [
+                // Map the legacy camelCase/underscore API URLs to Yii2 hyphenated action IDs
+                'api/walletEx'        => 'api/wallet-ex',
+                'api/walletex'        => 'api/wallet-ex',
+                'api/rental_price'    => 'api/rental-price',
+                'api/rental_hashrate' => 'api/rental-hashrate',
+                'api/rental_start'    => 'api/rental-start',
+                'api/rental_stop'     => 'api/rental-stop',
             ],
         ],
 

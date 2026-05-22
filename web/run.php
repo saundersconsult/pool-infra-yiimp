@@ -2,7 +2,7 @@
 
 if(php_sapi_name() != "cli") return;
 
-require_once('serverconfig.php');
+require_once('/etc/yiimp/serverconfig.php');
 require_once('yaamp/defaultconfig.php');
 
 require_once('framework/yii.php');

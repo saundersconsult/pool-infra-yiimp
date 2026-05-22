@@ -103,7 +103,7 @@ class ViewUtils extends Component
 		if($info) {
 			$html .= ' || '.$coin->createExplorerLink("<b>EXPLORER</b>");
 			$html .= ' || '.Html::a("<b>PEERS</b>", '/admin/coinwallet_peers?id='.$coin->id);
-			if (YAAMP_ADMIN_WEBCONSOLE)
+			if (YIIMP_ADMIN_WEBCONSOLE)
 				$html .= ' || '.Html::a("<b>CONSOLE</b>", '/admin/coinwallet_console?id='.$coin->id);
 			$html .= ' || '.Html::a("<b>TRIGGERS</b>", '/admin/cointriggers?id='.$coin->id);
 			if ($src != 'wallet')

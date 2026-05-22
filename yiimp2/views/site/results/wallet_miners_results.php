@@ -35,7 +35,7 @@ echo "</thead>";
 
 foreach(Yii::$app->YiimpUtils->get_algos() as $algo)
 {
-	if (!YAAMP_ALLOW_EXCHANGE && isset($coin) && $coin->algo != $algo) continue;
+	if (!YIIMP_ALLOW_EXCHANGE && isset($coin) && $coin->algo != $algo) continue;
 
 	$minercount = Workers::find()
 			->where(['userid' => $userid , 'algo' => $algo])
@@ -84,7 +84,7 @@ if(count($minercount))
 
 	foreach(Yii::$app->YiimpUtils->get_algos() as $algo)
 	{
-		if (!YAAMP_ALLOW_EXCHANGE && isset($coin) && $coin->algo != $algo) continue;
+		if (!YIIMP_ALLOW_EXCHANGE && isset($coin) && $coin->algo != $algo) continue;
 
 		$user_shared_rate = Yii::$app->YiimpUtils->user_shared_rate($userid, $algo);
 		$user_solo_rate = Yii::$app->YiimpUtils->user_solo_rate($userid, $algo);
@@ -112,7 +112,7 @@ if(count($minercount))
 
 		if ($shared_minercount)
 		{
-			if (YAAMP_ALLOW_EXCHANGE || !$user->coinid) 
+			if (YIIMP_ALLOW_EXCHANGE || !$user->coinid) 
 			{
 
 				$user_shared_shares = Yii::$app->cache->get("wallet_user_shared_shares-$userid-$algo");

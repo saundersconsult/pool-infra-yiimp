@@ -1,218 +1,333 @@
-<h1 align="center"> Yiimp - Yaamp Fork </h1>
+# Yiimp — Multi-Algorithm Mining Pool
 
-<h2 align="left"> Container-Environment </h3>
+A fork of the original Yaamp project. Supports a large number of PoW mining algorithms, auto-exchange payouts, and an optional hash-power renting system.
 
-** important notice: intented for local usage. if you want it to be available on public network you have to add more security rules like firewalling **
+> **Security notice**: the default configuration is intended for private/LAN use.  
+> Before exposing to the public internet add firewall rules, restrict admin access, and review all settings in `serverconfig.php`.
 
-info: the Makefile in this repo only cointains some helper commands for easier handling
+---
 
-<h3 align="left"> Requirements </h3>
+## Architecture
 
-* Linux
-* Mysql
-* Docker or Podman
+| Component | Path | Technology |
+|-----------|------|-----------|
+| Stratum server | `stratum/` | C++ — handles miner connections per algo |
+| Legacy web app | `web/` | Yii 1.1 / PHP 8 — pool logic, payouts, markets |
+| Modern web app | `yiimp2/` | Yii 2.0 / PHP 8 — in-progress migration target |
+| Background jobs | `yiimp2/jobs/` | yii2-queue delayed jobs (replaces shell loops) |
+| Config templates | `config/` | Supervisor, Apache vhosts, HAProxy |
 
-<h3 align="left"> build docker </h3>
+The pool currently runs both applications side by side.  
+`web/` handles all production logic; `yiimp2/` is the migration target and already serves the admin panel, stats, and API on port 8090.
 
-use
+---
 
-	make build
+## Requirements
 
-or as single command
+- Linux host (Ubuntu 24.04 recommended)
+- MySQL / MariaDB (external to the container)
+- Docker **or** Podman
+- A `config/` directory with your customised config files (see below)
 
-	podman build --tag yiimp --target image-prod -f Dockerfile.yiimp
+---
 
-<h3 align="left"> configuration und run </h3>
+## Build
 
-* first setup your mysql-database: create a 2 users (one for the web site (php) and one for the stratum connections)
-* if no memcached on system running, start the container internal one
-* the container has only default config built in so you have to link the live-config inside
-* create 2 folders - one for config, 1 for logfiles
-* use the config folder in repo as templates - modify supervisor-conf to your needs (which process to autostart and add stratum-processes if needed)
-* use "serverconfig.sample.php" as config template , rename to serverconfig.php and move config-dir
-* to access logfiles export the log-directory and the apache logfiles into the created log-folder
+```bash
+# Production image
+make build
+# or directly:
+podman build --tag yiimp --target image-prod -f Dockerfile.yiimp
 
-to start container
+# Development image (includes Xdebug)
+make build-devel
+```
 
-	make run
+---
 
-or as single command
+## First-time database setup
 
-	podman run --name=yiimp --network=host -v ./config:/etc/yiimp ./log:/var/www/log -v ./log:/var/log/yiimp -v ./yiimp/web:/var/www/ -v ./log:/var/log/apache2 -v ./config/supervisord.conf:/etc/supervisor/conf.d/supervisord.conf yiimp
+```sql
+-- Run as MySQL root
+CREATE DATABASE yaamp CHARACTER SET utf8mb4;
 
-inside the container starts supervisord for controlling the parts of pool altogether
-to start/stop each part head to http://localhost:8900/ or use cli
+-- Web/PHP user
+CREATE USER 'yiimp_web'@'localhost' IDENTIFIED BY 'choose-a-password';
+GRANT SELECT, INSERT, UPDATE, DELETE ON yaamp.* TO 'yiimp_web'@'localhost';
 
-	supervisorctl -u yiimp -p supervisor -s http://127.0.0.1:8900 status
+-- Stratum user (needs write access for shares)
+CREATE USER 'yiimp_stratum'@'localhost' IDENTIFIED BY 'choose-a-password';
+GRANT SELECT, INSERT, UPDATE, DELETE ON yaamp.* TO 'yiimp_stratum'@'localhost';
 
-change supervisord.conf to 
-* set username and password
-* add stratum instances
-* control backend-processes
+FLUSH PRIVILEGES;
+```
 
-additional SSL-support added by using HAProxy and Letsencrypt certificates - for HTTP/S and stratum connections
+Import the base schema from `sql/2024-03-06-complete_export.sql.gz`, then apply all migration scripts in date order:
 
-<h2 align="left"> original description - maybe outdated</h2>
-<h3 align="left"> Requirements </h3>
+```bash
+zcat sql/2024-03-06-complete_export.sql.gz | mysql -u root -p yaamp
+for f in sql/2024-*.sql sql/2025-*.sql sql/2026-*.sql; do
+    mysql -u root -p yaamp < "$f"
+done
+```
 
-* Linux
-* Mysql
-* Php 7.3
-* Memcached
-* Nginx (Recommended)
-    - You can also use lighttpd or apache
+### yii2-queue table (required for the Yii2 background job system)
 
-<h2 align="left"> Configuration</h2>
-<h3 align="center">Nginx </h3>
+Apply the dedicated migration file with a privileged account before starting the container:
 
-Use this Config on nginx:
+```bash
+mysql -u root -p yaamp < sql/2026-05-22-add_queue_table.sql
+```
 
+---
 
-	location / {
-		try_files $uri @rewrite;
-	}
+## Configuration
 
-	location @rewrite {
-		rewrite ^/(.*)$ /index.php?r=$1;
-	}
+### 1. Create your config directory
 
-	location ~ \.php$ {
-		fastcgi_pass unix:/var/run/php5-fpm.sock;
-		fastcgi_index index.php;
-		include fastcgi_params;
-	}
+```bash
+mkdir -p ./config ./log
+```
 
+Copy and edit the templates:
 
-<h3 align="center"> Apache </h3>
+```bash
+cp web/serverconfig.sample.php config/serverconfig.php
+cp config/supervisord.conf config/supervisord.conf   # already a template
+```
 
-It should be something like that (already set in web/.htaccess):
+### 2. `config/serverconfig.php` — key settings
 
-	RewriteEngine on
+All constants use the `YIIMP_` prefix. The `web/` (Yii 1.1) legacy code used the old `YAAMP_` prefix; backward-compatible shims are automatically defined at the bottom of the file — do not add separate `YAAMP_` defines.
 
-	RewriteCond %{REQUEST_FILENAME} !-f
-	RewriteRule ^(.*) index.php?r=$1 [QSA]
+```php
+// Database
+define('YIIMP_DBHOST',     'host-ip-or-hostname');
+define('YIIMP_DBNAME',     'yaamp');
+define('YIIMP_DBUSER',     'yiimp_web');
+define('YIIMP_DBPASSWORD', 'your-password');
 
-<h3 align="center"> Lighttpd </h3>
+// Site
+define('YIIMP_SITE_URL',  'pool.example.com');
+define('YIIMP_SITE_NAME', 'My Pool');
 
-use the following config:
+// Admin
+define('YIIMP_ADMIN_EMAIL', 'admin@example.com');
+define('YIIMP_ADMIN_USER',  'admin');
+define('YIIMP_ADMIN_PASS',  'strong-password');
+define('YIIMP_ADMIN_IP',    '');   // restrict to IP(s) if desired
 
-	$HTTP["host"] =~ "yiimp.ccminer.org" {
-	        server.document-root = "/var/yaamp/web"
-	        url.rewrite-if-not-file = (
-			"^(.*)/([0-9]+)$" => "index.php?r=$1&id=$2",
-			"^(.*)\?(.*)" => "index.php?r=$1&$2",
-	                "^(.*)" => "index.php?r=$1",
-	                "." => "index.php"
-	        )
+// Payouts
+define('YIIMP_PAYMENTS_FREQ', 3*60*60);   // every 3 h
+define('YIIMP_PAYMENTS_MINI', 0.001);     // minimum payout amount
 
-		url.access-deny = ( "~", ".dat", ".log" )
-	}
+// Pool fees (%)
+define('YIIMP_FEES_MINING',   0.5);
+define('YIIMP_FEES_SOLO',     1.0);
+define('YIIMP_FEES_EXCHANGE', 2.0);
 
-<h2 align="left"> Setup Instructions </h2>
+// Features
+define('YIIMP_RENTAL',         false);
+define('YIIMP_ALLOW_EXCHANGE', false);
+define('YIIMP_PRODUCTION',     true);
 
-For the database, import the initial dump present in the sql/ folder
+// NiceHash v2 (optional — pool buys hash power from NiceHash)
+// define('YIIMP_USE_NICEHASH_API', true);
+// define('NICEHASH_API_KEY',       'uuid-key');       // API key UUID
+// define('NICEHASH_API_SECRET',    'hmac-secret');    // signing secret
+// define('NICEHASH_ORG_ID',        'uuid-org');       // organisation UUID
+```
 
-Then, apply the migration scripts to be in sync with the current git, they are sorted by date of change.
+Full reference: `web/serverconfig.sample.php`.
 
-Your database need at least 2 users, one for the web site (php) and one for the stratum connections (password set in config/algo.conf).
+### 3. `config/supervisord.conf`
 
+The container uses supervisord to manage all pool processes.  
+The file in `config/supervisord.conf` is the authoritative template — copy it, then:
 
+- **Add stratum processes** for each algorithm you want to mine (copy the `[program:stratum-scrypt]` block, rename, and point to the correct `.conf` file)
+- The three background job queue workers (`yiimp-queue-seed`, `yiimp-queue-blocks`, `yiimp-queue-general`) are pre-configured and replace the old `main.sh` / `loop2.sh` / `blocks.sh` shell loops
 
-The recommended install folder for the stratum engine is /var/stratum. Copy all the .conf files, run.sh, the stratum binary and the blocknotify binary to this folder. 
+Example stratum entry:
 
-Some scripts are expecting the web folder to be /var/web. You can use directory symlinks...
+```ini
+[program:stratum-x11]
+command=stratum /etc/yiimp/stratum/x11.conf
+autostart=true
+autorestart=true
+user=root
+```
 
+Stratum config files go in `config/stratum/`. Use `config/stratum/scrypt.conf` as a template.
 
-Add your exchange API public and secret keys in these two separated files:
+---
 
-	/etc/yiimp/keys.php - fixed path in code
-	web/serverconfig.php - use sample as base...
+## Run
 
-You can find sample config files in web/serverconfig.sample.php and web/keys.sample.php
+```bash
+make run
+```
 
-This web application includes some command line tools, add bin/ folder to your path and type "yiimp" to list them, "yiimp checkup" can help to test your initial setup.
-Future scripts and maybe the "cron" jobs will then use this yiic console interface.
+or directly:
 
-You need at least three backend shells (in screen) running these scripts:
+```bash
+podman run -dt --name=yiimp --network=host \
+  -v ./config:/etc/yiimp \
+  -v ./config/supervisord.conf:/etc/supervisor/conf.d/supervisord.conf \
+  -v ./log:/var/log/apache2 \
+  -v ./log:/var/log/yiimp \
+  yiimp
+```
 
-	web/main.sh
-	web/loop2.sh
-	web/block.sh
+On first start, `yiimp-queue-seed` runs once and pushes all 22 recurring background jobs into the queue. Subsequent restarts are idempotent (existing jobs are not duplicated).
 
-Start one stratum per algo using the run.sh script with the algo as parameter. For example, for x11:
+### Development mode
 
-	run.sh x11
+```bash
+make run-devel
+```
 
-Edit each .conf file with proper values.
+This mounts the local source directories into the container so changes take effect immediately without a rebuild.
 
-Look at rc.local, it starts all three backend shells and all stratum processes. Copy it to the /etc folder so that all screen shells are started at boot up.
+---
 
-All your coin's config files need to blocknotify their corresponding stratum using something like:
+## Supervisor management
 
-	blocknotify=blocknotify yaamp.com:port coinid %s
+The supervisor web UI is available at **http://localhost:8900** (credentials: `yiimp` / `supervisor` by default — change in `supervisord.conf`).
 
-On the website, go to http://server.com/site/adminRights to login as admin. You have to change it to something different in the code (web/yaamp/modules/site/SiteController.php). A real admin login may be added later, but you can setup a password authentification with your web server, sample for lighttpd:
+From the command line inside the container:
 
-	htpasswd -c /etc/yiimp/admin.htpasswd <adminuser>
+```bash
+supervisorctl -u yiimp -p supervisor -s http://127.0.0.1:8900 status
+supervisorctl -u yiimp -p supervisor -s http://127.0.0.1:8900 start stratum-x11
+supervisorctl -u yiimp -p supervisor -s http://127.0.0.1:8900 stop  stratum-x11
+```
 
-and in the lighttpd config file:
+Or from the host if the container uses `--network=host`:
 
-	# Admin access
-	$HTTP["url"] =~ "^/site/adminRights" {
-	        auth.backend = "htpasswd"
-	        auth.backend.htpasswd.userfile = "/etc/yiimp/admin.htpasswd"
-	        auth.require = (
-	                "/" => (
-	                        "method" => "basic",
-	                        "realm" => "Yiimp Administration",
-	                        "require" => "valid-user"
-	                )
-	        )
-	}
+```bash
+supervisorctl -u yiimp -p supervisor -s http://127.0.0.1:8900 status
+```
 
-And finally remove the IP filter check in SiteController.php
+---
 
-Using MySQLTuner:
+## Background jobs (yii2-queue)
 
-sudo apt-get install mysqltuner
-wait at least 24h
-in cli: mysqltuner
+The legacy `main.sh` / `loop2.sh` / `blocks.sh` shell loops have been replaced by **yii2-queue delayed jobs**.  
+Three supervisor processes manage them:
 
-There are logs generated in the /var/stratum folder and /var/log/stratum/debug.log for the php log.
+| Process | Workers | Purpose |
+|---------|---------|---------|
+| `yiimp-queue-seed` | 1 (run-once) | Pushes all 22 jobs into the queue on startup |
+| `yiimp-queue-blocks` | 1 (persistent) | Block pipeline — 1s poll, time-critical |
+| `yiimp-queue-general` | 2 (persistent) | All other jobs — coins, stats, payouts, markets |
 
-More instructions coming as needed.
+The admin **Jobs dashboard** at `/admin/jobs` shows live status for all 22 jobs and provides pause / resume / run-now controls.
 
+---
 
-There a lot of unused code in the php branch. Lot come from other projects I worked on and I've been lazy to clean it up before to integrate it to yaamp. It's mostly based on the Yii framework which implements a lightweight MVC.
+## Web interfaces
 
-	http://www.yiiframework.com/
+| URL | Description |
+|-----|-------------|
+| `http://host:8080/` | Legacy Yii1 pool frontend |
+| `http://host:8090/` | Yii2 modern frontend (admin, stats, API docs) |
+| `http://host:8900/` | Supervisord web UI |
 
+**Admin login**: navigate to `/admin` and enter the credentials from `YIIMP_ADMIN_USER` / `YIIMP_ADMIN_PASS` in `serverconfig.php`.
 
-Credits:
+**API documentation**: `/site/api` — interactive Swagger UI documenting all public REST endpoints (`/api/wallet`, `/api/status`, `/api/currencies`, etc.).
 
-Thanks to globalzon to have released the initial Yaamp source code.
+---
 
---
+## SSL / TLS (optional)
 
-You can support this project donating 
+The container includes HAProxy and Certbot (Let's Encrypt).
 
-tpruvot :
+```bash
+# Initial certificate issuance
+make run-init-letsencrypt MAILADDRESS=admin@example.com DOMAINNAME=pool.example.com
+```
 
-	BTC : 1Auhps1mHZQpoX4mCcVL8odU81VakZQ6dR
+After a certificate is issued, enable HAProxy in `supervisord.conf` by setting `autostart=true` on the `[program:haproxy]` block and restart the container.
 
-xiaolin1579 :
+HAProxy listens on port 443 for HTTPS and can also terminate TLS for stratum connections (port 25+ for SSL stratum, configurable in the HAProxy config).
 
-	BTC : 1Hfa7BBHejzGj4CNRpV2Lh4xYGizX8c1A5
-	
-	BTC [BEP20] : 0xf6e4e1ce8b3801a612cfff40f29116fbf595b13e
-	
-	DOGE : D6oP3WPygJ4NR26XxfFydUsCiNS4oX9rqb
-	
-	USDT [BEP20] : 0xf6e4e1ce8b3801a612cfff40f29116fbf595b13e
-	
-	USDT [TRC20] : TF6vSbcFFGtwSRgvH1JqkQuVb9J4cszpGc
-	
-	RXD : 1N8WZpwSPaFvbaSMzDrPbLqbfM8tLVE87e
+---
 
-tpfuemp :
-	DOGE : DNQdyeLu9DtRfsZCFvy1GfJTwjWJoSWHLh
+## Stratum configuration
+
+Each algorithm needs its own `.conf` file in `config/stratum/`. Minimal example (`config/stratum/x11.conf`):
+
+```ini
+[server]
+stratumhost = pool.example.com
+stratumport = 3533
+workername  = x11
+rpcpasswd   = stratumpassword   # must match YAAMP_STRATUM_PASSWD in serverconfig.php
+
+[mysql]
+dbhost     = 127.0.0.1
+dbport     = 3306
+dbname     = yaamp
+dbuser     = yiimp_stratum
+dbpasswd   = your-stratum-db-password
+```
+
+Coin daemons should be configured to send block notifications to the stratum:
+
+```
+blocknotify=blocknotify pool.example.com:port coinid %s
+```
+
+---
+
+## Database migrations
+
+New algorithm and schema changes are shipped as dated SQL files in `sql/`. Apply them in order after pulling:
+
+```bash
+mysql -u root -p yaamp < sql/2026-03-29-add_algo_hoohash_pepew.sql
+```
+
+Notable migration files:
+
+| File | Purpose |
+|------|---------|
+| `sql/2024-03-06-complete_export.sql.gz` | Base schema (import first) |
+| `sql/2026-05-22-add_queue_table.sql` | yii2-queue table for Yii2 background jobs |
+| `sql/2026-03-29-add_algo_hoohash_pepew.sql` | Latest algorithm addition (most recent) |
+
+---
+
+## Project layout
+
+```
+stratum/        C++ stratum server source
+web/            Yii 1.1 pool application (production)
+yiimp2/         Yii 2.0 migration (admin, API, jobs)
+  commands/     Console commands (queue management, etc.)
+  components/   RPC clients (Bitcoin, Ethereum, Monero), utilities
+  controllers/  Web controllers
+  jobs/         yii2-queue job classes (22 jobs across 7 domains)
+  models/       ActiveRecord models
+  services/     Backend service classes (payments, coins, stats, …)
+  views/        Blade/PHP templates
+config/         Container config templates (supervisor, Apache, HAProxy)
+sql/            Database schema and incremental migration files
+bin/            CLI utilities (blocknotify, letsencrypt helpers)
+docs/           Technical planning documents
+```
+
+---
+
+## Credits
+
+Original Yaamp by globalzon.  
+Forked and maintained by [tpfuemp](https://github.com/tpfuemp).
+
+Donations welcome:
+
+```
+DOGE : DNQdyeLu9DtRfsZCFvy1GfJTwjWJoSWHLh
+```

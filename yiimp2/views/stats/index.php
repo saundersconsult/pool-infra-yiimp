@@ -91,7 +91,7 @@ $total3 = Yii::$app->ConversionUtils->bitcoinvaluetoa($row3['b']);
 
 $height = '240px';
 
-//$algos = yaamp_get_algos();
+//$algos = YIIMP_get_algos();
 $algos = array();
 $enabled = (new \yii\db\Query())
 			->select(['algo','count(id) as count'])

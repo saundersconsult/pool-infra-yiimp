@@ -7,7 +7,7 @@ use app\services\NicehashService;
 
 /**
  * Sync NiceHash global pricing data and auto-manage the pool's NiceHash orders.
- * Only active when YAAMP_USE_NICEHASH_API is true.
+ * Only active when YIIMP_USE_NICEHASH_API is true.
  *
  * @note NicehashService uses the v1 API — verify endpoint compatibility before enabling.
  * Ports: BackendUpdateServices() from web/yaamp/core/backend/services.php

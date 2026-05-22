@@ -7,7 +7,7 @@ use app\jobs\BaseJob;
 
 /**
  * Execute the full payment sequence: backup, send coins to users, clean database.
- * Runs only in production and only when YAAMP_PAYMENTS_FREQ seconds have elapsed
+ * Runs only in production and only when YIIMP_PAYMENTS_FREQ seconds have elapsed
  * since the last payout. Acquires 'balances_locked' for the duration.
  *
  * @todo implement — calls PaymentService::doPayments()
@@ -21,11 +21,11 @@ class PaymentsJob extends BaseJob
 
     protected function perform(): void
     {
-        if (!defined('YAAMP_PRODUCTION') || !YAAMP_PRODUCTION) {
+        if (!defined('YIIMP_PRODUCTION') || !YIIMP_PRODUCTION) {
             return;
         }
 
-        $freq       = defined('YAAMP_PAYMENTS_FREQ') ? (int) YAAMP_PAYMENTS_FREQ : 14400;
+        $freq       = defined('YIIMP_PAYMENTS_FREQ') ? (int) YIIMP_PAYMENTS_FREQ : 14400;
         $lastPayout = (int) (Yii::$app->cache->get('last_payout_time') ?: 0);
 
         if ($lastPayout + $freq > time()) {

@@ -331,7 +331,7 @@ function graph_earnings_init(data) {
 /* ── cookie management ───────────────────────────────────────────────────── */
 function main_wallet_tx() {
     window.open(_homeUrl + 'site/tx?address=' + encodeURIComponent(_username),
-        'yaamp_tx', 'width=800,height=600,location=no,menubar=no,resizable=yes,status=yes,toolbar=no');
+        'YIIMP_tx', 'width=800,height=600,location=no,menubar=no,resizable=yes,status=yes,toolbar=no');
 }
 
 function drop_cookie(el) {
