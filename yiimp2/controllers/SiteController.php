@@ -80,14 +80,275 @@ class SiteController extends Controller
     }
 
     /**
-     * Api page action.
-     *
-     * @return string
+     * API documentation page (Swagger UI).
      */
-    public function actionApi()
-	{
-		return $this->render('api');
-	}
+    public function actionApi(): string
+    {
+        return $this->render('api');
+    }
+
+    /**
+     * OpenAPI 3.0 specification served as JSON — consumed by Swagger UI.
+     * Dynamically includes rental endpoints when YAAMP_RENTAL is enabled.
+     */
+    public function actionApiSpec(): Response
+    {
+        $baseUrl       = 'http://' . (defined('YIIMP_API_URL') ? YIIMP_API_URL : Yii::$app->request->hostName);
+        $hasRental     = defined('YAAMP_RENTAL')             && YAAMP_RENTAL;
+        $hasPayouts    = defined('YIIMP_API_PAYOUTS')        && YIIMP_API_PAYOUTS;
+        $payoutHours   = defined('YIIMP_API_PAYOUTS_PERIOD') ? (int) (YIIMP_API_PAYOUTS_PERIOD / 3600) : 24;
+        $siteName      = defined('YAAMP_SITE_NAME')          ? YAAMP_SITE_NAME : 'Yiimp';
+
+        // ── Reusable response schemas ─────────────────────────────────────────
+        $schemas = [
+            'WalletStatus' => [
+                'type' => 'object',
+                'properties' => [
+                    'unsold'   => ['type' => 'number', 'format' => 'double', 'example' => 0.00050362],
+                    'balance'  => ['type' => 'number', 'format' => 'double', 'example' => 0.00000000],
+                    'unpaid'   => ['type' => 'number', 'format' => 'double', 'example' => 0.00050362],
+                    'paid24h'  => ['type' => 'number', 'format' => 'double', 'example' => 0.00000000],
+                    'total'    => ['type' => 'number', 'format' => 'double', 'example' => 0.00050362],
+                ],
+            ],
+            'MinerEntry' => [
+                'type' => 'object',
+                'properties' => [
+                    'version'    => ['type' => 'string',  'example' => 'ccminer/1.8.2'],
+                    'password'   => ['type' => 'string',  'example' => 'd=96'],
+                    'ID'         => ['type' => 'string',  'example' => ''],
+                    'algo'       => ['type' => 'string',  'example' => 'x11'],
+                    'difficulty' => ['type' => 'number',  'example' => 96],
+                    'subscribe'  => ['type' => 'integer', 'example' => 1],
+                    'accepted'   => ['type' => 'number',  'example' => 82463372.083],
+                    'rejected'   => ['type' => 'number',  'example' => 0],
+                ],
+            ],
+            'AlgoStatus' => [
+                'type' => 'object',
+                'properties' => [
+                    'name'              => ['type' => 'string',  'example' => 'x11'],
+                    'port'              => ['type' => 'integer', 'example' => 3533],
+                    'coins'             => ['type' => 'integer', 'example' => 10],
+                    'fees'              => ['type' => 'number',  'example' => 1],
+                    'hashrate'          => ['type' => 'integer', 'example' => 269473938],
+                    'workers'           => ['type' => 'integer', 'example' => 5],
+                    'estimate_current'  => ['type' => 'string',  'example' => '0.00053653'],
+                    'estimate_last24h'  => ['type' => 'string',  'example' => '0.00036408'],
+                    'actual_last24h'    => ['type' => 'string',  'example' => '0.00035620'],
+                    'hashrate_last24h'  => ['type' => 'integer', 'example' => 269473000],
+                    'rental_current'    => ['type' => 'string',  'example' => '3.61922463'],
+                ],
+            ],
+            'CurrencyStatus' => [
+                'type' => 'object',
+                'properties' => [
+                    'algo'          => ['type' => 'string',  'example' => 'bitcore'],
+                    'port'          => ['type' => 'integer', 'example' => 3556],
+                    'name'          => ['type' => 'string',  'example' => 'BitCore'],
+                    'height'        => ['type' => 'integer', 'example' => 18944],
+                    'workers'       => ['type' => 'integer', 'example' => 181],
+                    'shares'        => ['type' => 'integer', 'example' => 392],
+                    'hashrate'      => ['type' => 'integer', 'example' => 7267227499],
+                    '24h_blocks'    => ['type' => 'integer', 'example' => 329],
+                    '24h_btc'       => ['type' => 'number',  'example' => 0.54471295],
+                    'lastblock'     => ['type' => 'integer', 'example' => 18945],
+                    'timesincelast' => ['type' => 'integer', 'example' => 67],
+                ],
+            ],
+        ];
+
+        if ($hasRental) {
+            $schemas['RentalJob'] = [
+                'type' => 'object',
+                'properties' => [
+                    'jobid'     => ['type' => 'string'],
+                    'algo'      => ['type' => 'string'],
+                    'price'     => ['type' => 'string'],
+                    'hashrate'  => ['type' => 'string'],
+                    'server'    => ['type' => 'string'],
+                    'port'      => ['type' => 'string'],
+                    'username'  => ['type' => 'string'],
+                    'password'  => ['type' => 'string'],
+                    'started'   => ['type' => 'string'],
+                    'active'    => ['type' => 'string'],
+                    'accepted'  => ['type' => 'string'],
+                    'rejected'  => ['type' => 'string'],
+                    'diff'      => ['type' => 'string'],
+                ],
+            ];
+            $schemas['RentalStatus'] = [
+                'type' => 'object',
+                'properties' => [
+                    'balance'     => ['type' => 'number'],
+                    'unconfirmed' => ['type' => 'number'],
+                    'jobs'        => ['type' => 'array', 'items' => ['$ref' => '#/components/schemas/RentalJob']],
+                ],
+            ];
+        }
+
+        // ── Wallet extended (payouts optional) ────────────────────────────────
+        $walletExProps = [
+            'unsold'   => ['type' => 'number', 'format' => 'double'],
+            'balance'  => ['type' => 'number', 'format' => 'double'],
+            'unpaid'   => ['type' => 'number', 'format' => 'double'],
+            'paid24h'  => ['type' => 'number', 'format' => 'double'],
+            'total'    => ['type' => 'number', 'format' => 'double'],
+            'miners'   => ['type' => 'array', 'items' => ['$ref' => '#/components/schemas/MinerEntry']],
+        ];
+        if ($hasPayouts) {
+            $walletExProps['payouts'] = [
+                'type'        => 'array',
+                'description' => "Payouts from the last {$payoutHours} hours",
+                'items'       => [
+                    'type'       => 'object',
+                    'properties' => [
+                        'time'   => ['type' => 'integer', 'example' => 1529860641],
+                        'amount' => ['type' => 'string',  'example' => '0.001'],
+                        'tx'     => ['type' => 'string',  'example' => 'txid...'],
+                    ],
+                ],
+            ];
+        }
+        $schemas['WalletExtended'] = ['type' => 'object', 'properties' => $walletExProps];
+
+        // ── API key security scheme ───────────────────────────────────────────
+        $apiKeyParam = [
+            'name'        => 'key',
+            'in'          => 'query',
+            'required'    => true,
+            'description' => 'Your personal API key',
+            'schema'      => ['type' => 'string'],
+        ];
+
+        // ── Paths ─────────────────────────────────────────────────────────────
+        $paths = [
+            '/api/wallet' => ['get' => [
+                'tags'        => ['Wallet'],
+                'summary'     => 'Wallet balance summary',
+                'operationId' => 'getWallet',
+                'parameters'  => [[
+                    'name' => 'address', 'in' => 'query', 'required' => true,
+                    'description' => 'Wallet address (payout address)',
+                    'schema' => ['type' => 'string'],
+                ]],
+                'responses' => ['200' => [
+                    'description' => 'Wallet status',
+                    'content' => ['application/json' => ['schema' => ['$ref' => '#/components/schemas/WalletStatus']]],
+                ]],
+            ]],
+
+            '/api/walletEx' => ['get' => [
+                'tags'        => ['Wallet'],
+                'summary'     => 'Extended wallet status including connected miners' . ($hasPayouts ? " and last {$payoutHours}h payouts" : ''),
+                'operationId' => 'getWalletEx',
+                'parameters'  => [[
+                    'name' => 'address', 'in' => 'query', 'required' => true,
+                    'schema' => ['type' => 'string'],
+                ]],
+                'responses' => ['200' => [
+                    'description' => 'Extended wallet status',
+                    'content' => ['application/json' => ['schema' => ['$ref' => '#/components/schemas/WalletExtended']]],
+                ]],
+            ]],
+
+            '/api/status' => ['get' => [
+                'tags'        => ['Pool'],
+                'summary'     => 'Pool hashrate and profitability per algorithm',
+                'operationId' => 'getStatus',
+                'responses'   => ['200' => [
+                    'description' => 'Keyed by algo name',
+                    'content' => ['application/json' => ['schema' => [
+                        'type' => 'object',
+                        'additionalProperties' => ['$ref' => '#/components/schemas/AlgoStatus'],
+                    ]]],
+                ]],
+            ]],
+
+            '/api/currencies' => ['get' => [
+                'tags'        => ['Pool'],
+                'summary'     => 'Per-coin mining statistics',
+                'operationId' => 'getCurrencies',
+                'responses'   => ['200' => [
+                    'description' => 'Keyed by coin symbol',
+                    'content' => ['application/json' => ['schema' => [
+                        'type' => 'object',
+                        'additionalProperties' => ['$ref' => '#/components/schemas/CurrencyStatus'],
+                    ]]],
+                ]],
+            ]],
+        ];
+
+        if ($hasRental) {
+            $paths['/api/rental']          = ['get' => [
+                'tags' => ['Rental'], 'summary' => 'Rental balance and active jobs',
+                'operationId' => 'getRental',
+                'parameters'  => [$apiKeyParam],
+                'responses'   => ['200' => ['description' => 'Rental status',
+                    'content' => ['application/json' => ['schema' => ['$ref' => '#/components/schemas/RentalStatus']]]]],
+            ]];
+            $paths['/api/rental_price']    = ['get' => [
+                'tags' => ['Rental'], 'summary' => 'Set the price for a rental job',
+                'operationId' => 'setRentalPrice',
+                'parameters'  => [$apiKeyParam,
+                    ['name' => 'jobid', 'in' => 'query', 'required' => true, 'schema' => ['type' => 'integer']],
+                    ['name' => 'price', 'in' => 'query', 'required' => true, 'schema' => ['type' => 'number']],
+                ],
+                'responses' => ['200' => ['description' => 'OK']],
+            ]];
+            $paths['/api/rental_hashrate'] = ['get' => [
+                'tags' => ['Rental'], 'summary' => 'Set the maximum hashrate for a rental job',
+                'operationId' => 'setRentalHashrate',
+                'parameters'  => [$apiKeyParam,
+                    ['name' => 'jobid',    'in' => 'query', 'required' => true, 'schema' => ['type' => 'integer']],
+                    ['name' => 'hashrate', 'in' => 'query', 'required' => true, 'schema' => ['type' => 'integer']],
+                ],
+                'responses' => ['200' => ['description' => 'OK']],
+            ]];
+            $paths['/api/rental_start']    = ['get' => [
+                'tags' => ['Rental'], 'summary' => 'Start a rental job',
+                'operationId' => 'startRentalJob',
+                'parameters'  => [$apiKeyParam,
+                    ['name' => 'jobid', 'in' => 'query', 'required' => true, 'schema' => ['type' => 'integer']],
+                ],
+                'responses' => ['200' => ['description' => 'OK']],
+            ]];
+            $paths['/api/rental_stop']     = ['get' => [
+                'tags' => ['Rental'], 'summary' => 'Stop a rental job',
+                'operationId' => 'stopRentalJob',
+                'parameters'  => [$apiKeyParam,
+                    ['name' => 'jobid', 'in' => 'query', 'required' => true, 'schema' => ['type' => 'integer']],
+                ],
+                'responses' => ['200' => ['description' => 'OK']],
+            ]];
+        }
+
+        $tags = [
+            ['name' => 'Wallet', 'description' => 'Per-address balance and miner data'],
+            ['name' => 'Pool',   'description' => 'Pool-wide statistics'],
+        ];
+        if ($hasRental) {
+            $tags[] = ['name' => 'Rental', 'description' => 'Hash-power rental management'];
+        }
+
+        $spec = [
+            'openapi' => '3.0.3',
+            'info'    => [
+                'title'       => "{$siteName} Pool API",
+                'description' => 'Public REST API for the ' . $siteName . ' mining pool.',
+                'version'     => '1.0.0',
+            ],
+            'servers'    => [['url' => $baseUrl, 'description' => 'Pool server']],
+            'paths'      => $paths,
+            'components' => ['schemas' => $schemas],
+            'tags'       => $tags,
+        ];
+
+        $response = Yii::$app->response;
+        $response->format = Response::FORMAT_JSON;
+        $response->data   = $spec;
+        return $response;
+    }
 
     /**
      * Benchmarks page action.

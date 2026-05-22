@@ -2,211 +2,145 @@
 
 /** @var yii\web\View $this */
 
+$this->title = 'Dashboard';
+
 echo Yii::$app->ViewUtils->getAdminSideBarLinks();
+?>
 
-
-?>&nbsp;-&nbsp;
+&nbsp;-&nbsp;
 <a href='/admin/memcached'>Memcache</a>&nbsp;
 <a href='/admin/connections'>Connections</a>&nbsp;
 
-<?php if (YAAMP_RENTAL) : ?>
+<?php if (defined('YAAMP_RENTAL') && YAAMP_RENTAL): ?>
 <a href='/renting/admin'>Rental</a>&nbsp;
-<?php endif; ?>
+<?php endif ?>
 
-<div id='main_results'></div>
+<!-- The graph container divs (#graph_results_assets, #graph_results_negative)
+     are injected by common_results.php into #main_results below.
+     jqplot is called only after that AJAX load completes. -->
 
-<br><a href='/admin/coincreate'><img width=16 src=''><b>CREATE COIN</b></a>
-<br><a href='/admin/updateprice'><img width=16 src=''><b>UPDATE PRICE</b></a>
+<style>
+/* Prevent jqplot canvases from escaping their containers */
+#graph_results_assets,
+#graph_results_negative  { overflow: hidden; width: 100%; }
+#graph_results_assets canvas,
+#graph_results_negative canvas { max-width: 100% !important; }
+</style>
 
-<script type="text/javascript">
+<div id="main_results"></div>
 
-$(function()
-{
-	main_refresh();
-});
+<br>
+<a href='/admin/coincreate'><b>CREATE COIN</b></a>&nbsp;&nbsp;
+<a href='/admin/updateprice'><b>UPDATE PRICE</b></a>
 
-var main_delay=30000;
+<script>
+var _plotAssets   = null;
+var _plotNegative = null;
+
+$(function() { main_refresh(); });
+
+var main_delay   = 30000;
 var main_timeout;
 
-function main_ready(data)
-{
-	$('#main_results').html(data);
-	main_timeout = setTimeout(main_refresh, main_delay);
-
-	main_refresh_assets();
-	main_refresh_negative();
-//	main_refresh_profit();
+function main_ready(data) {
+    $('#main_results').html(data);
+    main_timeout = setTimeout(main_refresh, main_delay);
+    // Graph containers are now in the DOM — fetch and render
+    main_refresh_assets();
+    main_refresh_negative();
 }
 
-function main_error()
-{
-	main_timeout = setTimeout(main_refresh, main_delay*2);
+function main_error() {
+    main_timeout = setTimeout(main_refresh, main_delay * 2);
 }
 
-function main_refresh()
-{
-	var url = "/admin/common_results";
-
-	clearTimeout(main_timeout);
-	$.get(url, '', main_ready).error(main_error);
+function main_refresh() {
+    clearTimeout(main_timeout);
+    $.get('/admin/common_results', '', main_ready).fail(main_error);
 }
 
-///////////////////////////////////////////////////////////////////////
+// ── Assets graph ─────────────────────────────────────────────────────────────
+function main_refresh_assets() {
+    $.get('/admin/graph_assets_results', '', function(data) {
+        var $el = $('#graph_results_assets');
+        if (!$el.length) return;
+        $el.empty();
 
-function main_ready_assets(data)
-{
-	graph_init_assets(data);
+        try {
+            var t = $.parseJSON(data);
+            // If all series are empty show a placeholder instead of a blank box
+            var isEmpty = !t || t.every(function(s) { return !s || s.length === 0; });
+            if (isEmpty) {
+                $el.html('<div style="color:#aaa;text-align:center;padding-top:60px;">No stats data yet — StatsService needs to run first</div>');
+                return;
+            }
+            _plotAssets = $.jqplot('graph_results_assets', t, {
+                stackSeries: true,
+                seriesDefaults: {
+                    renderer: $.jqplot.BarRenderer,
+                    rendererOptions: { barWidth: 3 }
+                },
+                axes: {
+                    xaxis: {
+                        tickInterval: 7200,
+                        renderer: $.jqplot.DateAxisRenderer,
+                        tickOptions: { formatString: '<font size=1>%#Hh</font>' }
+                    },
+                    yaxis: {
+                        min: 0,
+                        tickOptions: { formatString: '<font size=1>%#.3f &nbsp;</font>' }
+                    }
+                },
+                grid: { borderWidth: 1, shadowWidth: 0, shadowDepth: 0, background: '#ffffff' }
+            });
+        } catch(e) {
+            $el.html('<div style="color:#aaa;text-align:center;padding-top:60px;">Graph error: ' + e.message + '</div>');
+        }
+    });
 }
 
-function main_refresh_assets()
-{
-	var url = "/admin/graph_assets_results";
-	$.get(url, '', main_ready_assets);
+// ── Liabilities graph ─────────────────────────────────────────────────────────
+function main_refresh_negative() {
+    $.get('/admin/graph_negative_results', '', function(data) {
+        var $el = $('#graph_results_negative');
+        if (!$el.length) return;
+        $el.empty();
+
+        try {
+            var t = $.parseJSON(data);
+            var isEmpty = !t || t.every(function(s) { return !s || s.length === 0; });
+            if (isEmpty) {
+                $el.html('<div style="color:#aaa;text-align:center;padding-top:50px;">No stats data yet</div>');
+                return;
+            }
+            _plotNegative = $.jqplot('graph_results_negative', t, {
+                stackSeries: true,
+                seriesDefaults: {
+                    renderer: $.jqplot.BarRenderer,
+                    rendererOptions: { barWidth: 3 }
+                },
+                axes: {
+                    xaxis: {
+                        tickInterval: 7200,
+                        renderer: $.jqplot.DateAxisRenderer,
+                        tickOptions: { formatString: '<font size=1>%#Hh</font>' }
+                    },
+                    yaxis: {
+                        min: 0,
+                        tickOptions: { formatString: '<font size=1>%#.3f &nbsp;</font>' }
+                    }
+                },
+                grid: { borderWidth: 1, shadowWidth: 0, shadowDepth: 0, background: '#ffffff' }
+            });
+        } catch(e) {
+            $el.html('<div style="color:#aaa;text-align:center;padding-top:50px;">Graph error: ' + e.message + '</div>');
+        }
+    });
 }
 
-function graph_init_assets(data)
-{
-	$('#graph_results_assets').empty();
-
-	var t = $.parseJSON(data);
-	var plot1 = $.jqplot('graph_results_assets', t,
-	{
-	//	title: '<b></b>',
-		stackSeries: true,
-
-		seriesDefaults:
-		{
-			renderer:$.jqplot.BarRenderer,
-			rendererOptions: {barWidth: 3}
-		},
-
-		axes: {
-			xaxis: {
-				tickInterval: 7200,
-				renderer: $.jqplot.DateAxisRenderer,
-			//	tickOptions: {showLabel: false}
-				tickOptions: {formatString: '<font size=1>%#Hh</font>'}
-			},
-			yaxis: {
-				min: 0,
-				tickOptions: {formatString: '<font size=1>%#.3f &nbsp;</font>'}
-			}
-		},
-
-		grid:
-		{
-			borderWidth: 1,
-			shadowWidth: 0,
-			shadowDepth: 0,
-			background: '#ffffff'
-		},
-
-	});
-}
-
-///////////////////////////////////////////////////////////////////////
-
-function main_ready_negative(data)
-{
-	graph_init_negative(data);
-}
-
-function main_refresh_negative()
-{
-	var url = "/admin/graph_negative_results";
-	$.get(url, '', main_ready_negative);
-}
-
-function graph_init_negative(data)
-{
-	$('#graph_results_negative').empty();
-
-	var t = $.parseJSON(data);
-	var plot1 = $.jqplot('graph_results_negative', t,
-	{
-	//	title: '<b></b>',
-		stackSeries: true,
-
-		seriesDefaults:
-		{
-			renderer:$.jqplot.BarRenderer,
-			rendererOptions: {barWidth: 3}
-		},
-
-		axes: {
-			xaxis: {
-				tickInterval: 7200,
-				renderer: $.jqplot.DateAxisRenderer,
-				tickOptions: {formatString: '<font size=1>%#Hh</font>'}
-			},
-			yaxis: {
-				min: 0,
-				tickOptions: {formatString: '<font size=1>%#.3f &nbsp;</font>'}
-			}
-		},
-
-		grid:
-		{
-			borderWidth: 1,
-			shadowWidth: 0,
-			shadowDepth: 0,
-			background: '#ffffff'
-		},
-
-	});
-}
-
-///////////////////////////////////////////////////////////////////////
-
-// function main_ready_profit(data)
-// {
-// 	graph_init_profit(data);
-// }
-
-// function main_refresh_profit()
-// {
-// 	var url = "/admin/graph_profit_results";
-// 	$.get(url, '', main_ready_profit);
-// }
-
-// function graph_init_profit(data)
-// {
-// 	$('#graph_results_profit').empty();
-
-// 	var t = $.parseJSON(data);
-// 	var plot1 = $.jqplot('graph_results_profit', t,
-// 	{
-// 	//	title: '<b></b>',
-// 		stackSeries: true,
-
-// 		seriesDefaults:
-// 		{
-// 			renderer:$.jqplot.BarRenderer,
-// 			rendererOptions: {barWidth: 3}
-// 		},
-
-// 		axes: {
-// 			xaxis: {
-// 				tickInterval: 7200,
-// 				renderer: $.jqplot.DateAxisRenderer,
-// 				tickOptions: {formatString: '<font size=1>%#Hh</font>'}
-// 			},
-// 			yaxis: {
-// 				min: 0,
-// 				tickOptions: {formatString: '<font size=1>%#.3f &nbsp;</font>'}
-// 			}
-// 		},
-
-// 		grid:
-// 		{
-// 			borderWidth: 1,
-// 			shadowWidth: 0,
-// 			shadowDepth: 0,
-// 			background: '#ffffff'
-// 		},
-
-// 	});
-// }
-
-
+// Replot on window resize
+$(window).on('resize', function() {
+    if (_plotAssets)   { try { _plotAssets.replot();   } catch(e) {} }
+    if (_plotNegative) { try { _plotNegative.replot(); } catch(e) {} }
+});
 </script>
