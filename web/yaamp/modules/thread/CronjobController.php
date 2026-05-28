@@ -150,7 +150,6 @@ class CronjobController extends CommonController
 				doYobitTrading();
 				doNestexTrading();
 				doNonkycTrading();
-				doTradeogreTrading();
 				break;
 
 			case 3:

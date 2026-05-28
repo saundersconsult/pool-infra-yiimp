@@ -35,18 +35,20 @@ define('YIIMP_ADMIN_WEBCONSOLE', true);
 define('YIIMP_ADMIN_LOGIN',      false);
 
 // ── Payments ──────────────────────────────────────────────────────────────
-define('YIIMP_FEES_SOLO',          1);
-define('YIIMP_FEES_MINING',        0.5);
-define('YIIMP_FEES_EXCHANGE',      2);
-define('YIIMP_FEES_RENTING',       2);
-define('YIIMP_TXFEE_RENTING_WD',   0.002);
+define('YIIMP_FEES_SOLO',          1);               // % fee on solo-mined blocks
+define('YIIMP_FEES_MINING',        0.5);             // % fee on shared-pool blocks
+define('YIIMP_FEES_EXCHANGE',      2);               // % fee deducted when setting coin price
 define('YIIMP_PAYMENTS_FREQ',      3*60*60);         // seconds between payout cycles
-define('YIIMP_PAYMENTS_MINI',      0.001);           // minimum payout amount
+define('YIIMP_PAYMENTS_MINI',      0.001);           // minimum payout amount (BTC)
 
 // ── Features ─────────────────────────────────────────────────────────────
 define('YIIMP_ALLOW_EXCHANGE',   false);             // enable multi-coin auto-exchange
-define('YIIMP_RENTAL',           false);             // enable hash-power renting service
+define('YIIMP_RENTAL',           false);             // enable hash-power renting (pool rents OUT to external renters)
 define('YIIMP_LIMIT_ESTIMATE',   false);             // cap estimate at 1.5× 24h average
+
+// ── Renting (only relevant when YIIMP_RENTAL = true) ─────────────────────
+define('YIIMP_FEES_RENTING',       2);               // % fee charged to renters per share
+define('YIIMP_TXFEE_RENTING_WD',   0.002);           // BTC tx fee deducted on renter withdrawal
 define('YIIMP_CREATE_NEW_COINS', true);              // auto-create coin records from market data
 define('YIIMP_NOTIFY_NEW_COINS', false);
 define('YIIMP_PUBLIC_EXPLORER',  true);
@@ -144,8 +146,6 @@ define('EXCH_POLONIEX_KEY',    '');
 define('EXCH_POLONIEX_SECRET', '');
 define('EXCH_SAFETRADE_KEY',   '');
 define('EXCH_SAFETRADE_SECRET','');
-define('EXCH_TRADEOGRE_KEY',   '');
-define('EXCH_TRADEOGRE_SECRET','');
 define('EXCH_YOBIT_KEY',       '');
 define('EXCH_YOBIT_SECRET',    '');
 define('EXCH_NONKYC_KEY',      '');
