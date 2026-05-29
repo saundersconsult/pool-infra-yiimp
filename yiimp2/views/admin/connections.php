@@ -29,7 +29,7 @@ function main_error()
 function main_refresh()
 {
 	var url = "/admin/connections_results";
-	$.get(url, '', main_ready).error(main_error);
+	$.get(url, '', main_ready).fail(main_error);
 }
 
 </script>

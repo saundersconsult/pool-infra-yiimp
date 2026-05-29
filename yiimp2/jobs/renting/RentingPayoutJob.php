@@ -18,6 +18,9 @@ class RentingPayoutJob extends BaseJob
 
     protected function perform(): void
     {
+        if (!defined('YIIMP_RENTAL') || !YIIMP_RENTAL) {
+            return;
+        }
         if (Yii::$app->cache->get('balances_locked')) {
             return;
         }

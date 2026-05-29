@@ -81,7 +81,7 @@ class StatsService
             );
 
             if (Yii::$app->ConversionUtils->bitcoinvaluetoa($stats->earnings) !== $earnings) {
-                Yii::info("{$algo} earnings: {$earnings} BTC", __CLASS__);
+                Yii::debug("{$algo} earnings: {$earnings} BTC", __CLASS__);
                 $stats->earnings = $earnings;
             }
 

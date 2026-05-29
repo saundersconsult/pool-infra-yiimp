@@ -1,6 +1,5 @@
 <?php
 
-use Yii;
 use app\components\rpc\WalletRPC;
 
 if (!$coin) $this->goback();

@@ -8,8 +8,7 @@ use yii\widgets\ActiveForm;
 use yii\jui\Tabs;
 use app\components\CUFHtml;
 
-use yii\helpers\ArrayHelper;
-use app\models\Algos;
+/** @var array  $algos  */
 
 echo Yii::$app->ViewUtils->getAdminSideBarLinks();
 
@@ -18,7 +17,7 @@ if (!is_null($coin->id))
 else
 	echo " - new coin";
 
-$ListAlgos = ArrayHelper::map(Algos::find()->all(), 'name', 'name');
+$ListAlgos = $algos;
 $coin_algo = ($coin->algo)? '<span style="color: green;">'.$coin->algo.'</span>' : '<span style="color: red;">None</span>';
 
 $form = ActiveForm::begin(['options' => ['class' => 'uniForm']]);

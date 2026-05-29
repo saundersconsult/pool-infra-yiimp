@@ -2,14 +2,11 @@
 
 namespace app\jobs\system;
 
-use Yii;
 use app\jobs\BaseJob;
 
 /**
- * Evaluate notification rules and dispatch alerts to users.
- *
- * @todo implement — calls NotificationService::checkRules()
- * Ports: NotifyCheckRules() — main.sh state 7 (~12 min).
+ * Evaluate all enabled notification rules and dispatch email/rpc/system alerts.
+ * Ports: NotifyCheckRules() — main.sh state 7.
  */
 class NotificationsJob extends BaseJob
 {

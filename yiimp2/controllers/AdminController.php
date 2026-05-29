@@ -11,6 +11,14 @@ use app\models\LoginForm;
 
 use app\components\rpc\WalletRPC;
 use app\models\Coins;
+use app\models\Markets;
+use app\models\Mining;
+use app\models\Algos;
+use app\models\Bookmarks;
+use app\models\Orders;
+use app\services\CoinService;
+use app\services\BlockService;
+use yii\helpers\ArrayHelper;
 
 class AdminController extends Controller
 {
@@ -278,7 +286,17 @@ class AdminController extends Controller
 
 	public function actionCoinwallet_results()
 	{
-		return $this->renderPartial('coinwallet_results');
+		$server      = Yii::$app->getRequest()->getQueryParam('server');
+		$coins       = CoinService::getCoinWalletList($server);
+		$mining      = Mining::find()->one();
+		$coinIds     = array_map(fn($c) => $c->id, $coins);
+		$blockCounts = CoinService::getBlockCountsByCoin($coinIds);
+
+		return $this->renderPartial('coinwallet_results', [
+			'coins'       => $coins,
+			'mining'      => $mining,
+			'blockCounts' => $blockCounts,
+		]);
 	}
 
     /////////////////////////////////////////////////
@@ -290,7 +308,16 @@ class AdminController extends Controller
 
     public function actionCoinwallet_details()
 	{
-		return $this->renderPartial('coinwallet_details');
+		$id   = (int) Yii::$app->getRequest()->getQueryParam('id');
+		$coin = Coins::findOne($id);
+		if (!$coin) {
+			return $this->goHome();
+		}
+
+		return $this->renderPartial('coinwallet_details', array_merge(
+			['coin' => $coin],
+			CoinService::getCoinWalletDetails($coin)
+		));
 	}
 
 	/////////////////////////////////////////////////
@@ -314,7 +341,8 @@ class AdminController extends Controller
 				return $this->redirect(array('coinwallets'));
 		}
 
-		return $this->render('coinwallet_form', array('update'=>false, 'coin'=>$coin));
+		$algos = ArrayHelper::map(Algos::find()->all(), 'name', 'name');
+		return $this->render('coinwallet_form', ['update' => false, 'coin' => $coin, 'algos' => $algos]);
 	}
 
 	public function actionCoinwallet_update()
@@ -337,7 +365,8 @@ class AdminController extends Controller
 			}
 		}
 
-		return $this->render('coinwallet_form', array('update'=>true, 'coin'=>$coin));
+		$algos = ArrayHelper::map(Algos::find()->all(), 'name', 'name');
+		return $this->render('coinwallet_form', ['update' => true, 'coin' => $coin, 'algos' => $algos]);
 	}
 
     /////////////////////////////////////////////////
@@ -441,6 +470,42 @@ class AdminController extends Controller
 
     /////////////////////////////////////////////////
 
+    public function actionBalances(): string
+    {
+        $this->requireAdmin();
+        return $this->render('balances');
+    }
+
+    public function actionBalances_results(): string
+    {
+        $this->requireAdmin();
+        $exch    = Yii::$app->request->get('exch', '');
+        $markets = \app\models\Markets::find()
+            ->where(['name' => $exch])
+            ->orderBy(new \yii\db\Expression('(balance + ontrade) * price DESC'))
+            ->all();
+        $mining  = \app\models\Mining::find()->one() ?? new \app\models\Mining(['usdbtc' => 0]);
+        return $this->renderPartial('balances_results', [
+            'exch'    => $exch,
+            'markets' => $markets,
+            'mining'  => $mining,
+        ]);
+    }
+
+    public function actionBalanceUpdate(): \yii\web\Response
+    {
+        $this->requireAdmin();
+        $id     = (int) Yii::$app->request->get('market');
+        $market = \app\models\Markets::findOne($id);
+        if ($market) {
+            \app\exchanges\ExchangeFactory::make($market->name)->updateMarkets();
+            return $this->redirect(['/admin/balances', 'exch' => $market->name]);
+        }
+        return $this->goBack();
+    }
+
+    /////////////////////////////////////////////////
+
 	public function actionExchange()
 	{
 		return $this->render('exchange');
@@ -449,6 +514,27 @@ class AdminController extends Controller
 	public function actionExchange_results()
 	{
 		return $this->renderPartial('exchange_results');
+	}
+
+	public function actionClearmarket()
+	{
+		$this->requireAdmin();
+		$market = Markets::findOne((int) Yii::$app->request->get('id'));
+		if ($market) {
+			$market->lastsent = null;
+			$market->save(false);
+		}
+		return $this->redirect(Yii::$app->request->referrer ?: ['/admin/exchange']);
+	}
+
+	public function actionClearorder()
+	{
+		$this->requireAdmin();
+		$order = Orders::findOne((int) Yii::$app->request->get('id'));
+		if ($order) {
+			$order->delete();
+		}
+		return $this->redirect(Yii::$app->request->referrer ?: ['/admin/exchange']);
 	}
 
     /////////////////////////////////////////////////
@@ -596,6 +682,103 @@ class AdminController extends Controller
 		}
 		return $this->goBack();
 	}
+
+	/////////////////////////////////////////////////
+
+	public function actionBookmarkAdd(): mixed
+	{
+		$this->requireAdmin();
+		$coin = Coins::findOne((int) Yii::$app->request->get('id'));
+		if (!$coin) {
+			return $this->goBack();
+		}
+
+		$bookmark          = new Bookmarks();
+		$bookmark->idcoin  = $coin->id;
+
+		if (Yii::$app->request->isPost) {
+			$bookmark->setAttributes(Yii::$app->request->post('Bookmarks', []), false);
+			if ($bookmark->save()) {
+				return $this->redirect(['/admin/coinwallet', 'id' => $coin->id]);
+			}
+		}
+
+		return $this->render('bookmark', ['bookmark' => $bookmark, 'coin' => $coin]);
+	}
+
+	public function actionBookmarkEdit(): mixed
+	{
+		$this->requireAdmin();
+		$bookmark = Bookmarks::findOne((int) Yii::$app->request->get('id'));
+		if (!$bookmark) {
+			Yii::$app->session->setFlash('error', 'invalid bookmark');
+			return $this->goBack();
+		}
+
+		$coin = Coins::findOne($bookmark->idcoin);
+
+		if (Yii::$app->request->isPost) {
+			$bookmark->setAttributes(Yii::$app->request->post('Bookmarks', []), false);
+			if ($bookmark->save()) {
+				return $this->redirect(['/admin/coinwallet', 'id' => $coin->id]);
+			}
+		}
+
+		return $this->render('bookmark', ['bookmark' => $bookmark, 'coin' => $coin]);
+	}
+
+	public function actionBookmarkDel(): mixed
+	{
+		$this->requireAdmin();
+		$bookmark = Bookmarks::findOne((int) Yii::$app->request->get('id'));
+		if ($bookmark) {
+			$bookmark->delete();
+		}
+		return $this->goBack();
+	}
+
+	public function actionBookmarkSend(): mixed
+	{
+		$this->requireAdmin();
+		$bookmark = Bookmarks::findOne((int) Yii::$app->request->get('id'));
+		if (!$bookmark) {
+			return $this->goBack();
+		}
+
+		$coin   = Coins::findOne($bookmark->idcoin);
+		$amount = (float) Yii::$app->request->get('amount', 0);
+
+		$remote = new WalletRPC($coin);
+		$info   = $remote->getinfo();
+
+		if (!$info || empty($info['balance'])) {
+			Yii::$app->session->setFlash('error', "not enough balance {$coin->name}");
+			return $this->redirect(['/admin/coinwallet', 'id' => $coin->id]);
+		}
+
+		$depositInfo = $remote->validateaddress($bookmark->address);
+		if (!$depositInfo || empty($depositInfo['isvalid'])) {
+			Yii::$app->session->setFlash('error', "invalid address for {$coin->name}, {$bookmark->address}");
+			return $this->redirect(['/admin/coinwallet', 'id' => $coin->id]);
+		}
+
+		$amount = round(min($amount, $info['balance'] - ($info['paytxfee'] ?? 0)), 8);
+
+		$tx = $remote->sendtoaddress($bookmark->address, $amount);
+		if (!$tx) {
+			Yii::$app->session->setFlash('error', $remote->error);
+			return $this->redirect(['/admin/coinwallet', 'id' => $coin->id]);
+		}
+
+		$bookmark->lastused = time();
+		$bookmark->save();
+
+		(new BlockService())->updatePoolBalances($coin->id);
+
+		return $this->redirect(['/admin/coinwallet', 'id' => $coin->id]);
+	}
+
+	/////////////////////////////////////////////////
 
 	/** Abort with 403 if the current user is not an admin. */
 	private function requireAdmin(): void

@@ -13,6 +13,7 @@ if(!$user) return;
 
 $userid = intval($user->id);
 $coinid = intval($user->coinid);
+$coin = null;
 if ($coinid) {
 	$coin = Coins::find()
 				->where([ 'id' => $coinid ])
@@ -47,7 +48,7 @@ foreach(Yii::$app->YiimpUtils->get_algos() as $algo)
 	$user_ttf = 0;
 
 	if ($pool_hash != 0) {
-		$user_ttf  = $user_pool_rate ? $coin->difficulty * 0x100000000 / $pool_hash : 0;
+		$user_ttf  = ($user_pool_rate && $coin) ? $coin->difficulty * 0x100000000 / $pool_hash : 0;
 	}
 	$user_ttf  = $user_ttf ? Yii::$app->ConversionUtils->sectoa2($user_ttf) : '-';
 

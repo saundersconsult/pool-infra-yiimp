@@ -3,7 +3,10 @@
 namespace app\services;
 
 use Yii;
+use app\exchanges\ExchangeFactory;
 use app\models\Coins;
+use app\models\Connections;
+use app\models\Mining;
 use app\components\rpc\WalletRPC;
 
 /**
@@ -11,6 +14,10 @@ use app\components\rpc\WalletRPC;
  *
  * Ported from:
  *   web/yaamp/core/backend/coins.php → updateCoinStats, updateVersionFromGithub
+ *   web/yaamp/core/backend/rawcoins.php → updateRawCoins
+ *
+ * Per-exchange raw-coin discovery logic lives in ExchangeDriver subclasses
+ * under app\exchanges\drivers\.
  *
  * External utility methods used (already in Yii2 components):
  *   Yii::$app->YiimpUtils->get_algos()       ← YIIMP_get_algos()
@@ -286,7 +293,7 @@ class CoinService
             }
 
             $apiUrl = str_replace('https://github.com/', 'https://api.github.com/repos/', $coin->link_github) . '/releases/latest';
-            Yii::info("GitHub version check: {$coin->name} ({$coin->symbol})", __CLASS__);
+            Yii::debug("GitHub version check: {$coin->name} ({$coin->symbol})", __CLASS__);
 
             $ch = curl_init($apiUrl);
             curl_setopt_array($ch, [
@@ -489,17 +496,147 @@ class CoinService
     }
 
     // =========================================================================
+    // Admin coinwallet page queries
+    // =========================================================================
+
+    /**
+     * Coins shown on the /admin/coinwallets list page.
+     */
+    public static function getCoinWalletList(?string $server): array
+    {
+        $query = Coins::find()
+            ->where(['installed' => 1, 'watch' => 1])
+            ->orderBy('algo, index_avg DESC');
+
+        if (!empty($server)) {
+            $query->andWhere(['rpchost' => $server]);
+        }
+
+        return $query->all();
+    }
+
+    /**
+     * Block counts for the last 100 network blocks per coin, batched into one
+     * query instead of 2×N individual queries.
+     * Returns ['found' => [coinId => int], 'orphan' => [coinId => int]].
+     */
+    public static function getBlockCountsByCoin(array $coinIds): array
+    {
+        if (empty($coinIds)) {
+            return ['found' => [], 'orphan' => []];
+        }
+
+        $rows = (new \yii\db\Query())
+            ->select([
+                'b.coin_id',
+                "SUM(b.category != 'orphan') AS found",
+                "SUM(b.category = 'orphan')  AS orphan",
+            ])
+            ->from(['b' => 'blocks'])
+            ->innerJoin(['c' => 'coins'], 'b.coin_id = c.id')
+            ->where(['in', 'b.coin_id', $coinIds])
+            ->andWhere('b.height >= c.block_height - 100')
+            ->groupBy('b.coin_id')
+            ->all();
+
+        $found  = [];
+        $orphan = [];
+        foreach ($rows as $row) {
+            $found[$row['coin_id']]  = (int) $row['found'];
+            $orphan[$row['coin_id']] = (int) $row['orphan'];
+        }
+
+        return ['found' => $found, 'orphan' => $orphan];
+    }
+
+    /**
+     * All DB-only data for the /admin/coinwallet detail page.
+     * RPC calls (getinfo, listtransactions, getblock) remain in the view.
+     *
+     * Returned keys:
+     *   balance, reserved1, owed, owed_btc, reserved2 (null unless exchange),
+     *   markets (Markets[]), bookmarks (Bookmarks[]), symbol (string)
+     */
+    public static function getCoinWalletDetails(Coins $coin): array
+    {
+        $reserved1 = (new \yii\db\Query())
+            ->select(['SUM(balance)'])
+            ->from('accounts')
+            ->where(['coinid' => $coin->id])
+            ->scalar();
+
+        $owed = (new \yii\db\Query())
+            ->select(['SUM(earnings.amount)'])
+            ->from('earnings')
+            ->leftJoin('blocks', 'earnings.blockid = blocks.id')
+            ->where(['coinid' => $coin->id])
+            ->andWhere(['!=', 'earnings.status', 2])
+            ->scalar();
+
+        $result = [
+            'balance'   => Yii::$app->ConversionUtils->altcoinvaluetoa($coin->balance),
+            'reserved1' => Yii::$app->ConversionUtils->altcoinvaluetoa($reserved1),
+            'owed'      => Yii::$app->ConversionUtils->altcoinvaluetoa($owed),
+            'owed_btc'  => Yii::$app->ConversionUtils->bitcoinvaluetoa($owed * $coin->price),
+            'reserved2' => null,
+            'markets'   => \app\models\Markets::find()
+                            ->where(['coinid' => $coin->id, 'deleted' => 0])
+                            ->orderBy('disabled, priority DESC, price DESC')
+                            ->all(),
+            'bookmarks' => \app\models\Bookmarks::find()
+                            ->where(['idcoin' => $coin->id])
+                            ->orderBy('lastused DESC')
+                            ->all(),
+            'symbol'    => !empty($coin->symbol2) ? $coin->symbol2 : $coin->symbol,
+        ];
+
+        if (defined('YIIMP_ALLOW_EXCHANGE') && YIIMP_ALLOW_EXCHANGE) {
+            $subquery = (new \yii\db\Query())
+                ->select(['id'])
+                ->from('accounts')
+                ->where(['coinid' => $coin->id]);
+            $tmp = (new \yii\db\Query())
+                ->select(['SUM(amount*price)'])
+                ->from('earnings')
+                ->where(['in', 'id', $subquery])
+                ->andWhere(['!=', 'status', 2])
+                ->scalar();
+            $result['reserved2'] = Yii::$app->ConversionUtils->bitcoinvaluetoa($tmp);
+        }
+
+        return $result;
+    }
+
+    /**
+     * Batch-load which of the given wallet addresses exist in the accounts table.
+     * Returns an array_flip'd set for O(1) isset() checks in view loops.
+     */
+    public static function getKnownAddresses(array $addresses): array
+    {
+        if (empty($addresses)) {
+            return [];
+        }
+        $known = (new \yii\db\Query())
+            ->select(['username'])
+            ->from('accounts')
+            ->where(['in', 'username', $addresses])
+            ->column();
+        return array_flip($known);
+    }
+
+    // =========================================================================
     // Raw-coin / market discovery (ported from rawcoins.php)
     // =========================================================================
 
     /**
      * Refresh market listings from all active exchanges: set disabled flags,
      * delete stale market rows, and optionally create new coin records.
+     * Per-exchange discovery is delegated to ExchangeDriver::discoverCoins().
      * Ports: updateRawcoins()
      */
     public function updateRawCoins(): void
     {
-        Yii::info(__METHOD__, __CLASS__);
+        Yii::debug(__METHOD__, __CLASS__);
 
         // Apply default enabled/disabled flags per exchange
         $exchangeDefaults = [
@@ -556,14 +693,14 @@ class CoinService
                     }
                 }
 
-                Yii::info("{$exchange}: {$affected} markets disabled", __CLASS__);
+                Yii::debug("{$exchange}: {$affected} markets disabled", __CLASS__);
             } else {
                 $re = (int) $db->createCommand(
                     "UPDATE markets SET disabled=0 WHERE name=:ex AND disabled=8",
                     [':ex' => $exchange]
                 )->execute();
                 if ($re) {
-                    Yii::info("{$exchange}: {$re} markets re-enabled", __CLASS__);
+                    Yii::debug("{$exchange}: {$re} markets re-enabled", __CLASS__);
                 }
             }
         }
@@ -572,266 +709,79 @@ class CoinService
     }
 
     /**
-     * Scan a single exchange for its current coin list and upsert market records.
-     * Ports: updateRawCoinExchange()
+     * Snapshot MySQL SHOW PROCESSLIST into the connections table and prune stale rows.
+     * Ports: BackendProcessList() — blocks.sh every 20s.
      */
-    private function updateRawCoinExchange(string $exchange): void
+    public function processJobQueue(): void
     {
-        Yii::info("==== Exchange {$exchange} ====", __CLASS__);
+        $db  = Yii::$app->db;
+        $now = time();
 
-        $disabled = function_exists('exchange_get') && exchange_get($exchange, 'disabled');
-        if ($disabled) {
-            return;
+        $rows = $db->createCommand('SHOW PROCESSLIST')->queryAll();
+        foreach ($rows as $item) {
+            $conn = Connections::findOne((int) $item['Id']);
+            if (!$conn) {
+                $conn          = new Connections();
+                $conn->id      = (int) $item['Id'];
+                $conn->user    = $item['User']  ?? '';
+                $conn->host    = $item['Host']  ?? '';
+                $conn->db      = $item['db']    ?? '';
+                $conn->created = $now;
+            }
+            $conn->idle = (int) ($item['Time'] ?? 0);
+            $conn->last = $now;
+            $conn->save();
         }
 
-        $db = Yii::$app->db;
-
-        switch ($exchange) {
-            case 'exbitron':
-                if (!function_exists('exbitron_api_query')) { break; }
-                $list = exbitron_api_query('cmc/summary');
-                if (!is_array($list) || empty($list)) { break; }
-                $db->createCommand("UPDATE markets SET deleted=true WHERE name=:ex", [':ex' => $exchange])->execute();
-                foreach ($list as $data) {
-                    $base   = strtoupper($data->quote_currency);
-                    $symbol = strtoupper($data->base_currency);
-                    if ($symbol === 'BTC' && in_array($base, ['USDT','USDC'], true)) {
-                        [$symbol, $base] = [$base, $symbol];
-                    } elseif ($symbol === 'BTC') {
-                        continue;
-                    }
-                    $this->updateRawCoin($exchange, $symbol, $symbol, $base === 'BTC' ? null : $base);
-                }
-                break;
-
-            case 'nestex':
-                if (!function_exists('nestex_api_query')) { break; }
-                $list = nestex_api_query();
-                if (!is_array($list) || empty($list)) { break; }
-                $db->createCommand("UPDATE markets SET deleted=true WHERE name=:ex", [':ex' => $exchange])->execute();
-                foreach ($list as $data) {
-                    if (empty($data['base_currency']) || empty($data['target_currency'])) { continue; }
-                    $symbol = strtoupper($data['base_currency']);
-                    $base   = strtoupper($data['target_currency']);
-                    if ($base !== 'USDT') { continue; }
-                    $this->updateRawCoin($exchange, $symbol, $symbol, $base);
-                }
-                break;
-
-            case 'nonkyc':
-                if (!function_exists('nonkyc_api_query')) { break; }
-                $list = nonkyc_api_query('tickers', '', 'array');
-                if (!is_array($list) || empty($list)) { break; }
-                $db->createCommand("UPDATE markets SET deleted=true WHERE name=:ex", [':ex' => $exchange])->execute();
-                foreach ($list as $ticker) {
-                    $base   = strtoupper($ticker['target_currency']);
-                    $symbol = strtoupper($ticker['base_currency']);
-                    if ($symbol === 'BTC' && in_array($base, ['USDT','USDC'], true)) {
-                        [$symbol, $base] = [$base, $symbol];
-                    } elseif ($symbol === 'BTC') {
-                        continue;
-                    }
-                    $this->updateRawCoin($exchange, $symbol, $symbol, $base === 'BTC' ? null : $base);
-                }
-                break;
-
-            case 'safetrade':
-                if (!function_exists('safetrade_api_query')) { break; }
-                $list = safetrade_api_query('trade/public/markets', '', 'array');
-                if (!is_array($list) || empty($list)) { break; }
-                $db->createCommand("UPDATE markets SET deleted=true WHERE name=:ex", [':ex' => $exchange])->execute();
-                foreach ($list as $ticker) {
-                    $base   = strtoupper($ticker['quote_unit']);
-                    $symbol = strtoupper($ticker['base_unit']);
-                    $this->updateRawCoin($exchange, $symbol, $symbol, $base === 'BTC' ? null : $base);
-                }
-                break;
-
-            case 'tradeogre':
-                if (!function_exists('tradeogre_api_query')) { break; }
-                $list = tradeogre_api_query('markets');
-                if (!is_array($list) || empty($list)) { break; }
-                $db->createCommand("UPDATE markets SET deleted=true WHERE name=:ex", [':ex' => $exchange])->execute();
-                foreach ($list as $ticker) {
-                    $idx    = key($ticker);
-                    $parts  = explode('-', $idx);
-                    $base   = strtoupper($parts[1] ?? '');
-                    $symbol = strtoupper($parts[0] ?? '');
-                    $this->updateRawCoin($exchange, $symbol, $symbol, $base === 'BTC' ? null : $base);
-                }
-                break;
-
-            case 'poloniex':
-                if (!class_exists('poloniex')) { break; }
-                $poloniex = new \poloniex();
-                $tickers  = $poloniex->get_currencies();
-                if (!$tickers) { break; }
-                $db->createCommand("UPDATE markets SET deleted=true WHERE name=:ex", [':ex' => $exchange])->execute();
-                foreach ($tickers as $symbol => $ticker) {
-                    if ($ticker['disabled'] ?? false) { continue; }
-                    if ($ticker['delisted'] ?? false) { continue; }
-                    $this->updateRawCoin($exchange, $symbol);
-                }
-                break;
-
-            case 'yobit':
-                if (!function_exists('yobit_api_query')) { break; }
-                $res = yobit_api_query('info');
-                if (!$res) { break; }
-                $db->createCommand("UPDATE markets SET deleted=true WHERE name=:ex", [':ex' => $exchange])->execute();
-                foreach ($res->pairs as $i => $item) {
-                    $symbol = strtoupper(explode('_', $i)[0]);
-                    $this->updateRawCoin($exchange, $symbol);
-                }
-                break;
-
-            case 'hitbtc':
-                if (!function_exists('hitbtc_api_query')) { break; }
-                $list = hitbtc_api_query('symbols');
-                if (!is_object($list) || !isset($list->symbols)) { break; }
-                $db->createCommand("UPDATE markets SET deleted=true WHERE name=:ex", [':ex' => $exchange])->execute();
-                foreach ($list->symbols as $data) {
-                    if (strtoupper($data->currency) !== 'BTC') { continue; }
-                    $this->updateRawCoin($exchange, strtoupper($data->commodity));
-                }
-                break;
-
-            case 'kraken':
-                if (!function_exists('kraken_api_query')) { break; }
-                $list = kraken_api_query('AssetPairs');
-                if (!is_array($list)) { break; }
-                $db->createCommand("UPDATE markets SET deleted=true WHERE name=:ex", [':ex' => $exchange])->execute();
-                foreach ($list as $pair => $item) {
-                    $parts  = explode('-', $pair);
-                    $base   = reset($parts);
-                    $symbol = end($parts);
-                    if ($symbol === 'BTC' || $base !== 'BTC') { continue; }
-                    if (in_array($symbol, ['GBP','CAD','EUR','USD','JPY'], true)) { continue; }
-                    if (str_contains($symbol, '.d')) { continue; }
-                    $this->updateRawCoin($exchange, strtoupper($symbol));
-                }
-                break;
-
-            case 'binance':
-                if (!function_exists('binance_api_query')) { break; }
-                $list = binance_api_query('ticker/allBookTickers');
-                if (!is_array($list)) { break; }
-                $db->createCommand("UPDATE markets SET deleted=true WHERE name=:ex", [':ex' => $exchange])->execute();
-                foreach ($list as $ticker) {
-                    $base = substr($ticker->symbol, -3);
-                    if ($base !== 'BTC') { continue; }
-                    $symbol = substr($ticker->symbol, 0, strlen($ticker->symbol) - 3);
-                    $this->updateRawCoin($exchange, $symbol);
-                }
-                break;
-
-            case 'kucoin':
-                if (!function_exists('kucoin_api_query') || !function_exists('kucoin_result_valid')) { break; }
-                $list = kucoin_api_query('currencies');
-                if (!kucoin_result_valid($list) || empty($list->data)) { break; }
-                $db->createCommand("UPDATE markets SET deleted=true WHERE name=:ex", [':ex' => $exchange])->execute();
-                foreach ($list->data as $item) {
-                    $this->updateRawCoin($exchange, $item->name, $item->fullName);
-                }
-                break;
-
-            case 'shapeshift':
-                if (!function_exists('shapeshift_api_query')) { break; }
-                $list = shapeshift_api_query('getcoins');
-                if (!is_array($list) || empty($list)) { break; }
-                $db->createCommand("UPDATE markets SET deleted=true WHERE name=:ex", [':ex' => $exchange])->execute();
-                foreach ($list as $item) {
-                    if ($item['status'] !== 'available') { continue; }
-                    $this->updateRawCoin($exchange, strtoupper($item['symbol']), trim($item['name']));
-                }
-                break;
-
-            case 'bibox':
-                if (!function_exists('bibox_api_query')) { break; }
-                $list = bibox_api_query('marketAll');
-                if (!isset($list['result'])) { break; }
-                $db->createCommand("UPDATE markets SET deleted=true WHERE name=:ex", [':ex' => $exchange])->execute();
-                foreach ($list['result'] as $currency) {
-                    if ($currency['currency_symbol'] === 'BTC') { continue; }
-                    $this->updateRawCoin($exchange, $currency['coin_symbol']);
-                }
-                break;
-
-            default:
-                Yii::info("No raw-coin scanner for exchange: {$exchange}", __CLASS__);
-                break;
-        }
-
-        Yii::info('==== END Exchange ====', __CLASS__);
+        $db->createCommand('DELETE FROM connections WHERE last < :cutoff', [
+            ':cutoff' => $now - 5 * 60,
+        ])->execute();
     }
 
     /**
-     * Upsert a market record for a coin/exchange pair, and optionally create
-     * the coin itself when YIIMP_CREATE_NEW_COINS is enabled.
-     * Ports: updateRawCoin()
+     * Fetch the current BTC/USD price from Bitstamp and store it in mining.usdbtc.
+     * Ports: bitstamp_btcusd() + cron state-0 save block
      */
-    private function updateRawCoin(
-        string  $exchange,
-        string  $symbol,
-        string  $name          = 'unknown',
-        ?string $referenceSymbol = null
-    ): void {
-        if ($symbol === 'BTC') {
+    public function updateBtcUsdPrice(): void
+    {
+        $ch = curl_init('https://www.bitstamp.net/api/v2/ticker/btcusd/');
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_CONNECTTIMEOUT => 10,
+            CURLOPT_TIMEOUT        => 30,
+        ]);
+        $raw    = curl_exec($ch);
+        $errno  = curl_errno($ch);
+        curl_close($ch);
+
+        if ($errno || !$raw) {
+            Yii::warning('Bitstamp BTC/USD fetch failed (curl error ' . $errno . ')', __CLASS__);
             return;
         }
 
-        $coin = Coins::find()->where(['symbol' => $symbol])->one();
-        $createNew = defined('YIIMP_CREATE_NEW_COINS') && YIIMP_CREATE_NEW_COINS;
+        $ticker = json_decode($raw, true);
+        $btcusd = isset($ticker['last']) ? (float) $ticker['last'] : 0.0;
 
-        if (!$coin && $createNew) {
-            // Skip high-noise exchanges that would pollute the DB
-            if (in_array($exchange, ['askcoin','binance','hitbtc','yobit','kucoin'], true)) {
-                return;
-            }
-            if (function_exists('market_get') && market_get($exchange, $symbol, 'disabled')) {
-                return;
-            }
-
-            Yii::info("new coin {$exchange} {$symbol} {$name}", __CLASS__);
-            $coin             = new Coins();
-            $coin->txmessage  = true;
-            $coin->hassubmitblock = true;
-            $coin->name       = $name;
-            $coin->algo       = '';
-            $coin->symbol     = $symbol;
-            $coin->created    = time();
-            $coin->save();
-            sleep(1);
-
-        } elseif ($coin && $coin->name === 'unknown' && $name !== 'unknown') {
-            $coin->name = $name;
-            $coin->save();
+        if ($btcusd <= 0.0) {
+            Yii::warning('Bitstamp BTC/USD returned invalid price: ' . $raw, __CLASS__);
+            return;
         }
 
-        // Upsert the market record for all coins that match by symbol or symbol2
-        $coinsForSymbol = Coins::find()
-            ->where(['symbol' => $symbol])
-            ->orWhere(['symbol2' => $symbol])
-            ->all();
+        $mining = Mining::find()->one() ?? new Mining();
+        $mining->usdbtc = $btcusd;
+        $mining->save();
 
-        foreach ($coinsForSymbol as $c) {
-            $query = \app\models\Markets::find()->where(['coinid' => $c->id, 'name' => $exchange]);
-            if (is_null($referenceSymbol)) {
-                $query->andWhere(['or', ['base_coin' => null], ['base_coin' => '']]);
-            } else {
-                $query->andWhere(['base_coin' => $referenceSymbol]);
-            }
-            $market = $query->one();
+        Yii::info(sprintf('BTC/USD updated: %.2f', $btcusd), __CLASS__);
+    }
 
-            if (!$market) {
-                $market            = new \app\models\Markets();
-                $market->coinid    = $c->id;
-                $market->name      = $exchange;
-                $market->base_coin = $referenceSymbol;
-            }
+    // -------------------------------------------------------------------------
+    // Private helpers
+    // -------------------------------------------------------------------------
 
-            $market->deleted = false;
-            $market->save();
-        }
+    private function updateRawCoinExchange(string $exchange): void
+    {
+        Yii::debug("==== Exchange {$exchange} ====", __CLASS__);
+        ExchangeFactory::make($exchange)->discoverCoins();
+        Yii::debug('==== END Exchange ====', __CLASS__);
     }
 }

@@ -2,15 +2,12 @@
 
 namespace app\jobs\coins;
 
-use Yii;
 use app\jobs\BaseJob;
+use app\services\CoinService;
 
 /**
- * Process the internal coin action queue (jobs table): start/stop stratums, etc.
- *
- * @todo implement — calls CoinService::processJobQueue()
- * Ports: BackendProcessList() from web/yaamp/core/backend/coins.php
- * Called by blocks.sh every 20s.
+ * Snapshot MySQL SHOW PROCESSLIST into the connections table and prune stale rows.
+ * Ports: BackendProcessList() — blocks.sh every 20s.
  */
 class ProcessJobQueueJob extends BaseJob
 {
@@ -18,7 +15,6 @@ class ProcessJobQueueJob extends BaseJob
 
     protected function perform(): void
     {
-        // TODO: (new \app\services\CoinService())->processJobQueue();
-        Yii::warning('ProcessJobQueueJob: not yet implemented (pending CoinService)', 'queue');
+        (new CoinService())->processJobQueue();
     }
 }

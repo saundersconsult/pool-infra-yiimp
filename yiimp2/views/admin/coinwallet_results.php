@@ -1,7 +1,7 @@
 <?php
-
-use app\models\Coins;
-use app\models\Mining;
+/** @var Coins[]                                    $coins       */
+/** @var app\models\Mining|null                     $mining      */
+/** @var array{found:array,orphan:array}            $blockCounts */
 
 function valuetocell($amount) {
 	$html = $amount ? Yii::$app->ConversionUtils->bitcoinvaluetoa($amount) : '-';
@@ -58,19 +58,6 @@ echo <<<end
 </thead><tbody>
 end;
 
-$server = Yii::$app->getRequest()->getQueryParam('server');
-
-$coins_query = Coins::find()
-				->where(['installed' => 1,'watch' => 1])
-				->orderBy('algo , index_avg DESC');
-
-if(!empty($server)) {
-	$coins = $coins_query->andWhere(['rpchost' => $server])->all();
-}
-else
-	$coins = $coins_query->all();
-
-$mining = Mining::find()->one();
 
 foreach($coins as $coin)
 {
@@ -130,21 +117,8 @@ foreach($coins as $coin)
 	$btcmhd = Yii::$app->YiimpUtils->yiimp_profitability($coin);
 	$btcmhd = Yii::$app->ConversionUtils->mbitcoinvaluetoa($btcmhd);
 
-	$h = $coin->block_height-100;
-	$ss1 = (new \yii\db\Query())
-				->select(['count(*)'])
-				->from('blocks')
-				->where(['coin_id' => $coin->id])
-				->andWhere(['>=', 'height' , $h])
-				->andWhere(['!=', 'category' , 'orphan'])
-				->scalar();
-	$ss2 = (new \yii\db\Query())
-				->select(['count(*)'])
-				->from('blocks')
-				->where(['coin_id' => $coin->id])
-				->andWhere(['>=', 'height' , $h])
-				->andWhere(['=', 'category' , 'orphan'])
-				->scalar();
+	$ss1 = $blockCounts['found'][$coin->id]  ?? 0;
+	$ss2 = $blockCounts['orphan'][$coin->id] ?? 0;
 
 	$percent_pool1 = $ss1? $ss1.'%': '';
 	$percent_pool2 = $ss2? $ss2.'%': '';

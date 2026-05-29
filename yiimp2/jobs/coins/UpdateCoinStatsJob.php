@@ -2,15 +2,12 @@
 
 namespace app\jobs\coins;
 
-use Yii;
 use app\jobs\BaseJob;
 
 /**
- * Update per-coin statistics: block height, wallet info, connection status.
- *
- * @todo implement — calls CoinService::updateCoinStats()
- * Ports: BackendCoinsUpdate() from web/yaamp/core/backend/coins.php
- * Called by loop2.sh every 60s.
+ * Poll every installed coin's wallet daemon: update difficulty, block height,
+ * reward, connections, and profitability index.
+ * Ports: BackendCoinsUpdate() — loop2.sh every 60s.
  */
 class UpdateCoinStatsJob extends BaseJob
 {

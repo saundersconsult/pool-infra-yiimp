@@ -1,63 +1,29 @@
 <?php
 
 /** @var yii\web\View $this */
+/** @var app\models\Coins        $coin      */
+/** @var string                  $balance   */
+/** @var string                  $reserved1 */
+/** @var string                  $owed      */
+/** @var string                  $owed_btc  */
+/** @var string|null             $reserved2 */
+/** @var app\models\Markets[]    $markets   */
+/** @var app\models\Bookmarks[]  $bookmarks */
+/** @var string                  $symbol    */
 
 use yii\bootstrap5\Html;
-
 use app\components\rpc\WalletRPC;
-use app\models\Coins;
-use app\models\Markets;
-use app\models\Bookmarks;
+use app\services\CoinService;
 
-$id = (int) Yii::$app->getRequest()->getQueryParam('id');
-$coin = Coins::findOne($id);
-
-if (!$coin) {
-	return Yii::$app->controller->goHome();
-}
-
-$PoS = ($coin->algo == 'PoS'); // or if 'stake' key is present in 'getinfo' method
+$PoS = ($coin->algo == 'PoS');
 $DCR = ($coin->rpcencoding == 'DCR' || $coin->getOfficialSymbol() == 'DCR');
 $DGB = ($coin->rpcencoding == 'DGB' || $coin->getOfficialSymbol() == 'DGB');
 $ETH = ($coin->rpcencoding == 'GETH');
 
 $remote = new WalletRPC($coin);
 
-$reserved1 = (new \yii\db\Query())
-				->select(['SUM(balance)'])
-				->from('accounts')
-				->where(['coinid' => $coin->id])
-				->scalar();
-$reserved1 = Yii::$app->ConversionUtils->altcoinvaluetoa($reserved1);
-$balance   = Yii::$app->ConversionUtils->altcoinvaluetoa($coin->balance);
-
-$owed     = (new \yii\db\Query())
-				->select(['SUM(earnings.amount) AS owed'])
-				->from('earnings')
-                ->leftJoin('blocks', 'earnings.blockid = blocks.id')
-				->where(['coinid' => $coin->id])
-				->andWhere(['!=', 'earnings.status' , 2])
-				->scalar();
-$owed_btc = Yii::$app->ConversionUtils->bitcoinvaluetoa($owed * $coin->price);
-$owed     = Yii::$app->ConversionUtils->altcoinvaluetoa($owed);
-
-$symbol = $coin->symbol;
-if (!empty($coin->symbol2))
-    $symbol = $coin->symbol2;
-
 echo "<br/>";
-if (YIIMP_ALLOW_EXCHANGE) {
-    $subquery = (new \yii\db\Query())
-				->select(['id'])
-				->from('accounts')
-				->where(['coinid' => $coin->id]);
-    $tmp_dbvalue = (new \yii\db\Query())
-				->select(['SUM(amount*price)'])
-				->from('earnings')
-                ->Where(['in', 'id', $subquery])
-				->andWhere(['!=', 'status' , 2])
-				->scalar();
-    $reserved2 = Yii::$app->ConversionUtils->bitcoinvaluetoa($tmp_dbvalue);
+if (YIIMP_ALLOW_EXCHANGE && $reserved2 !== null) {
     echo "Earnings $reserved2 BTC, ";
 }
 echo "Balance (db) $balance $symbol";
@@ -89,12 +55,7 @@ echo <<<end
 </tr></thead><tbody>
 end;
 
-$list = Markets::find()
-            ->where(['coinid' => $coin->id, 'deleted' => 0])
-            ->orderBy('disabled, priority DESC, price DESC')
-            ->all();
-//$bestmarket = getBestMarket($coin);
-foreach ($list as $market) {
+foreach ($markets as $market) {
     $marketurl = '#';
     $price     = Yii::$app->ConversionUtils->bitcoinvaluetoa($market->price);
     $price2    = Yii::$app->ConversionUtils->bitcoinvaluetoa($market->price2);
@@ -126,7 +87,7 @@ foreach ($list as $market) {
         ));
         echo ' ' . $market->deposit_address;
     }
-    echo ' <a href="/market/update?id=' . $market->id . '">edit</a>';
+    echo ' <a href="/admin/market/update?id=' . $market->id . '">edit</a>';
     echo '</td>';
 
     $updated = "last updated: " . strip_tags(Yii::$app->ConversionUtils->datetoa2($market->balancetime));
@@ -148,19 +109,17 @@ foreach ($list as $market) {
 
     echo '<td align="right">';
     if ($market->disabled)
-        echo '<a title="Enable this market" href="/market/enable?id=' . $market->id . '&en=1">enable</a>';
+        echo '<a title="Enable this market" href="/admin/market/enable?id=' . $market->id . '&en=1">enable</a>';
     else
-        echo '<a title="Disable this market" href="/market/enable?id=' . $market->id . '&en=0">disable</a>';
-    echo '&nbsp;<a class="red" title="Remove this market" href="/market/delete?id=' . $market->id . '">delete</a>';
+        echo '<a title="Disable this market" href="/admin/market/enable?id=' . $market->id . '&en=0">disable</a>';
+    echo '&nbsp;<a class="red" title="Remove this market" href="/admin/market/delete?id=' . $market->id . '">delete</a>';
     echo '</td>';
 
     echo "</tr>";
 }
 
 // in the list after the markets, made for quick send between wallets
-$list = Bookmarks::find()->where(['idcoin' => $coin->id])->orderBy('lastused DESC')->all();
-
-foreach ($list as $bookmark) {
+foreach ($bookmarks as $bookmark) {
     echo '<tr class="ssrow bookmark">';
 
     echo '<td><b>' . $bookmark->label . '<b></td>';
@@ -457,6 +416,16 @@ if ($DCR) {
         ksort($txs_array); // was in reversed order
 }
 
+// Batch-load which tx addresses are known pool users (replaces N per-tx queries).
+$_addrs = [];
+foreach ($txs_array as $_tx) {
+    if (isset($_tx['address'])) {
+        $_addrs[] = $_tx['address'];
+    }
+}
+$knownAddresses = CoinService::getKnownAddresses(array_unique($_addrs));
+unset($_addrs, $_tx);
+
 $rows = 0;
 foreach ($txs_array as $tx) {
     if (!isset($tx['amount'])) {
@@ -504,12 +473,7 @@ foreach ($txs_array as $tx) {
     echo '<td width="280">';
     if (isset($tx['address'])) {
         $address = $tx['address'];
-        $exists  = (new \yii\db\Query())
-				->select(['count(*) AS nb'])
-				->from('accounts')
-				->where(['username' => $address])
-				->scalar();
-        if ($exists)
+        if (isset($knownAddresses[$address]))
             echo \yii\helpers\Html::a(\yii\helpers\Html::encode($address), '/?address=' . urlencode($address));
         else
             echo $address . '<br>';

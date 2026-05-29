@@ -533,12 +533,12 @@ class NicehashService
         ]);
 
         $rawBody = $body !== null ? json_encode($body, JSON_UNESCAPED_UNICODE) : '';
-        match ($method) {
-            'POST'   => (curl_setopt($ch, CURLOPT_POST, true),
-                         curl_setopt($ch, CURLOPT_POSTFIELDS, $rawBody)),
-            'DELETE' => curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'DELETE'),
-            default  => null,
-        };
+        if ($method === 'POST') {
+            curl_setopt($ch, CURLOPT_POST, true);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, $rawBody);
+        } elseif ($method === 'DELETE') {
+            curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'DELETE');
+        }
 
         $result     = curl_exec($ch);
         $httpStatus = curl_getinfo($ch, CURLINFO_HTTP_CODE);

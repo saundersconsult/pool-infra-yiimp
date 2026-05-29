@@ -2,15 +2,11 @@
 
 namespace app\jobs\system;
 
-use Yii;
 use app\jobs\BaseJob;
 
 /**
- * Periodic housekeeping: quick database cleanup of expired shares, old stats, etc.
- * Runs independently of the payment cycle at a low frequency.
- *
- * @todo implement — calls PaymentService::quickClean() / cleanDatabase()
- * Ports: BackendQuickClean() — main.sh default case (after state 7 cycle).
+ * Prune old unreferenced blocks, orphan earnings, and zero orphan block amounts.
+ * Ports: BackendQuickClean() — hourly housekeeping.
  */
 class MaintenanceJob extends BaseJob
 {

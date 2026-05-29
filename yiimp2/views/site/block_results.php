@@ -2,7 +2,6 @@
 
 // JavascriptFile("/yaamp/ui/js/jquery.metadata.js");
 // JavascriptFile("/yaamp/ui/js/jquery.tablesorter.widgets.js");
-use Yii;
 use app\models\Blocks;
 use app\models\Coins;
 

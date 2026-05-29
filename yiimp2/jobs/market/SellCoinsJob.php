@@ -2,14 +2,11 @@
 
 namespace app\jobs\market;
 
-use Yii;
 use app\jobs\BaseJob;
 
 /**
- * Sell accumulated mined coins on exchanges to fund user payouts.
- *
- * @todo implement — calls MarketService::sellCoins()
- * Ports: TradingSellCoins() — main.sh state 5 (~12 min).
+ * Send excess coin wallet balances to their best market deposit address.
+ * Ports: TradingSellCoins() — main.sh state 5.
  */
 class SellCoinsJob extends BaseJob
 {

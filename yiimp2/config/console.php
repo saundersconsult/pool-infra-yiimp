@@ -1,7 +1,7 @@
 <?php
 
 // include serverconfig
-require_once('/etc/yiimp/serverconfig.php');
+require_once(file_exists('/etc/yiimp/serverconfig.php') ? '/etc/yiimp/serverconfig.php' : 'serverconfig.php');
 require_once(__DIR__ . '/constants.php');   // promote YAAMP_* → YIIMP_* if serverconfig is old
 
 if (defined('YIIMP_DEBUG') && (YIIMP_DEBUG === true)) {
@@ -16,6 +16,23 @@ else {
 $params = require __DIR__ . '/params.php';
 $db = require __DIR__ . '/db.php';
 
+if ((defined('YIIMP_MEMCACHE_HOST')) && (YIIMP_MEMCACHE_HOST != '')) {
+    $cache_config = [
+        'class' => 'yii\caching\MemCache',
+        'servers' => [
+            [
+                'host'   => YIIMP_MEMCACHE_HOST,
+                'port'   => YIIMP_MEMCACHE_PORT,
+                'weight' => 60,
+            ],
+        ],
+    ];
+} else {
+    $cache_config = [
+        'class' => 'yii\caching\FileCache',
+    ];
+}
+
 $config = [
     'id' => 'basic-console',
     'basePath' => dirname(__DIR__),
@@ -27,18 +44,25 @@ $config = [
         '@tests' => '@app/tests',
     ],
     'components' => [
-        'cache' => [
-            'class' => 'yii\caching\FileCache',
-        ],
+        'cache' => $cache_config,
         'log' => [
             'targets' => [
                 [
-                    'class' => 'yii\log\FileTarget',
-                    'levels' => ['error', 'warning'],
+                    'class'    => 'yii\log\FileTarget',
+                    'levels'   => ['error', 'warning', 'info'],
+                    'logFile'  => YIIMP_LOGS . '/yiimp2.log',
+                    'logVars'  => [],
+                    'except'   => ['yii\db\*'],
                 ],
             ],
         ],
         'db' => $db,
+        'YiimpUtils' => [
+            'class' => 'app\components\YiimpUtils',
+        ],
+        'ConversionUtils' => [
+            'class' => 'app\components\ConversionUtils',
+        ],
         'queue' => [
             'class'     => \yii\queue\db\Queue::class,
             'db'        => 'db',

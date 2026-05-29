@@ -38,7 +38,7 @@ function main_refresh()
 	var url = "{$homeUrl}site/block_results?id=$id";
 
 	clearTimeout(main_timeout);
-	$.get(url, '', main_ready).error(main_error);
+	$.get(url, '', main_ready).fail(main_error);
 }
 
 </script>

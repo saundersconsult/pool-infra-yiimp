@@ -2,15 +2,11 @@
 
 namespace app\jobs\stats;
 
-use Yii;
 use app\jobs\BaseJob;
 
 /**
- * Aggregate per-user hashrate, share counts, and earnings summaries.
- *
- * @todo implement — calls UserService::updateUserStats() (or StatsService)
- * Ports: BackendUsersUpdate() from web/yaamp/core/backend/users.php
- * Called by loop2.sh every 60s.
+ * Resolve unassigned wallet addresses to their coin and process coin-switch requests.
+ * Ports: BackendUsersUpdate() — loop2.sh every 60s.
  */
 class UpdateUserStatsJob extends BaseJob
 {

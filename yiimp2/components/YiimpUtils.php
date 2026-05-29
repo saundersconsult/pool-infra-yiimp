@@ -7,6 +7,7 @@ use yii\base\Component;
 
 use app\models\Coins;
 use app\models\Accounts;
+use app\exchanges\ExchangeFactory;
 
 class YiimpUtils extends Component
 {
@@ -467,7 +468,14 @@ class YiimpUtils extends Component
 		$interval = $this->hashrate_step();
 		$delay = time()-$interval;
 
-		$rate = controller()->memcache->get_database_scalar("YIIMP_pool_solo_rate-$algo","SELECT (sum(difficulty) * $target / $interval / 1000) FROM shares WHERE valid AND time>$delay AND algo=:algo AND solo=1", array(':algo'=>$algo));
+		$rate = Yii::$app->cache->get("YIIMP_pool_solo_rate-$algo");
+		if ($rate === false) {
+			$rate = Yii::$app->db->createCommand(
+				"SELECT (sum(difficulty) * $target / $interval / 1000) FROM shares WHERE valid AND time>$delay AND algo=:algo AND solo=1",
+				[':algo' => $algo]
+			)->queryScalar();
+			Yii::$app->cache->set("YIIMP_pool_solo_rate-$algo", $rate);
+		}
 		return $rate;
 	}
 
@@ -479,9 +487,14 @@ class YiimpUtils extends Component
 		$interval = $this->hashrate_step();
 		$delay = time()-$interval;
 
-		$rate = controller()->memcache->get_database_scalar("YIIMP_pool_rate_bad-$algo",
-			"SELECT (sum(difficulty) * $target / $interval / 1000) FROM shares WHERE not valid AND time>$delay AND algo=:algo", array(':algo'=>$algo));
-
+		$rate = Yii::$app->cache->get("YIIMP_pool_rate_bad-$algo");
+		if ($rate === false) {
+			$rate = Yii::$app->db->createCommand(
+				"SELECT (sum(difficulty) * $target / $interval / 1000) FROM shares WHERE NOT valid AND time>$delay AND algo=:algo",
+				[':algo' => $algo]
+			)->queryScalar();
+			Yii::$app->cache->set("YIIMP_pool_rate_bad-$algo", $rate);
+		}
 		return $rate;
 	}
 
@@ -537,7 +550,14 @@ class YiimpUtils extends Component
 		$interval = $this->hashrate_step();
 		$delay = time()-$interval;
 
-		$rate = controller()->memcache->get_database_scalar("YIIMP_user_shared_rate-$userid-$algo","SELECT (sum(difficulty) * $target / $interval / 1000) FROM shares WHERE valid AND time>$delay AND userid=$userid AND algo=:algo AND solo=0", array(':algo'=>$algo));
+		$rate = Yii::$app->cache->get("YIIMP_user_shared_rate-$userid-$algo");
+		if ($rate === false) {
+			$rate = Yii::$app->db->createCommand(
+				"SELECT (sum(difficulty) * $target / $interval / 1000) FROM shares WHERE valid AND time>$delay AND userid=:uid AND algo=:algo AND solo=0",
+				[':uid' => $userid, ':algo' => $algo]
+			)->queryScalar();
+			Yii::$app->cache->set("YIIMP_user_shared_rate-$userid-$algo", $rate);
+		}
 		return $rate;
 	}
 
@@ -549,7 +569,14 @@ class YiimpUtils extends Component
 		$interval = $this->hashrate_step();
 		$delay = time()-$interval;
 
-		$rate = controller()->memcache->get_database_scalar("YIIMP_user_solo_rate-$userid-$algo","SELECT (sum(difficulty) * $target / $interval / 1000) FROM shares WHERE valid AND time>$delay AND userid=$userid AND algo=:algo AND solo=1", array(':algo'=>$algo));
+		$rate = Yii::$app->cache->get("YIIMP_user_solo_rate-$userid-$algo");
+		if ($rate === false) {
+			$rate = Yii::$app->db->createCommand(
+				"SELECT (sum(difficulty) * $target / $interval / 1000) FROM shares WHERE valid AND time>$delay AND userid=:uid AND algo=:algo AND solo=1",
+				[':uid' => $userid, ':algo' => $algo]
+			)->queryScalar();
+			Yii::$app->cache->set("YIIMP_user_solo_rate-$userid-$algo", $rate);
+		}
 		return $rate;
 	}
 
@@ -741,33 +768,50 @@ class YiimpUtils extends Component
 
 	public function job_rate($jobid)
 	{
-		$job = getdbo('db_jobs', $jobid);
-		if(!$job) return 0;
+		$job = \app\models\Jobs::findOne((int) $jobid);
+		if (!$job) return 0;
 
-		$target = YIIMP_hashrate_constant($job->algo);
-		$interval = YIIMP_hashrate_step();
-		$delay = time()-$interval;
+		$target   = $this->hashrate_constant($job->algo);
+		$interval = $this->hashrate_step();
+		$delay    = time() - $interval;
 
-		$rate = controller()->memcache->get_database_scalar("YIIMP_job_rate-$jobid",
-			"SELECT (sum(difficulty) * $target / $interval / 1000) FROM jobsubmits WHERE valid AND time>$delay AND jobid=".$jobid);
+		$rate = Yii::$app->cache->get("YIIMP_job_rate-$jobid");
+		if ($rate === false) {
+			$rate = Yii::$app->db->createCommand(
+				"SELECT (sum(difficulty) * $target / $interval / 1000) FROM jobsubmits WHERE valid AND time>$delay AND jobid=:jid",
+				[':jid' => $jobid]
+			)->queryScalar();
+			Yii::$app->cache->set("YIIMP_job_rate-$jobid", $rate);
+		}
 		return $rate;
 	}
 
 	public function job_rate_bad($jobid)
 	{
-		$job = getdbo('db_jobs', $jobid);
-		if(!$job) return 0;
+		$job = \app\models\Jobs::findOne((int) $jobid);
+		if (!$job) return 0;
 
-		$target = YIIMP_hashrate_constant($job->algo);
-		$interval = YIIMP_hashrate_step();
-		$delay = time()-$interval;
+		$target   = $this->hashrate_constant($job->algo);
+		$interval = $this->hashrate_step();
+		$delay    = time() - $interval;
 
-		$diff = (double) controller()->memcache->get_database_scalar("YIIMP_job_diff_avg-$jobid",
-			"SELECT avg(difficulty) FROM jobsubmits WHERE valid AND time>$delay AND jobid=".$jobid);
+		$diff = Yii::$app->cache->get("YIIMP_job_diff_avg-$jobid");
+		if ($diff === false) {
+			$diff = (float) Yii::$app->db->createCommand(
+				"SELECT avg(difficulty) FROM jobsubmits WHERE valid AND time>$delay AND jobid=:jid",
+				[':jid' => $jobid]
+			)->queryScalar();
+			Yii::$app->cache->set("YIIMP_job_diff_avg-$jobid", $diff);
+		}
 
-		$rate = controller()->memcache->get_database_scalar("YIIMP_job_rate_bad-$jobid",
-			"SELECT ((count(id) * $diff) * $target / $interval / 1000) FROM jobsubmits WHERE valid!=1 AND time>$delay AND jobid=".$jobid);
-
+		$rate = Yii::$app->cache->get("YIIMP_job_rate_bad-$jobid");
+		if ($rate === false) {
+			$rate = Yii::$app->db->createCommand(
+				"SELECT ((count(id) * $diff) * $target / $interval / 1000) FROM jobsubmits WHERE valid!=1 AND time>$delay AND jobid=:jid",
+				[':jid' => $jobid]
+			)->queryScalar();
+			Yii::$app->cache->set("YIIMP_job_rate_bad-$jobid", $rate);
+		}
 		return $rate;
 	}
 
@@ -791,8 +835,19 @@ class YiimpUtils extends Component
 	}
 
 	/* Format an exchange coin Url */
-	public function getMarketUrl($coin, $marketName)
+	public function getMarketUrl($coin, $marketName): string
 	{
-		return '';
+		$symbol = method_exists($coin, 'getOfficialSymbol') ? $coin->getOfficialSymbol() : $coin->symbol;
+		$base   = 'BTC';
+		$market = trim($marketName);
+
+		if (str_contains($marketName, ' ')) {
+			[$market, $basePart] = explode(' ', $marketName, 2);
+			if ($basePart !== '') {
+				$base = $basePart;
+			}
+		}
+
+		return ExchangeFactory::make($market)->marketUrl($symbol, $base);
 	}
 }

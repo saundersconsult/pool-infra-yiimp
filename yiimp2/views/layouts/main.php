@@ -42,9 +42,9 @@ $this->registerLinkTag(['rel' => 'icon', 'type' => 'image/x-icon', 'href' => Yii
     ]);
 
     $mining = Mining::find()->one();
-	$nextpayment = date('H:i T', $mining->last_payout+YIIMP_PAYMENTS_FREQ);
-	$eta = ($mining->last_payout+YIIMP_PAYMENTS_FREQ) - time();
-	$eta_mn = 'in '.round($eta / 60).' minutes';
+	$nextpayment = $mining ? date('H:i T', $mining->last_payout+YIIMP_PAYMENTS_FREQ) : '';
+	$eta = $mining ? ($mining->last_payout+YIIMP_PAYMENTS_FREQ) - time() : 0;
+	$eta_mn = $eta ? 'in '.round($eta / 60).' minutes' : '';
 
     $items_navbar = [
             ['label' => 'Home', 'url' => ['/site/index']],

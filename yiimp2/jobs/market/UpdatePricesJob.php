@@ -2,14 +2,11 @@
 
 namespace app\jobs\market;
 
-use Yii;
 use app\jobs\BaseJob;
 
 /**
- * Fetch current market prices for all active coins and watch for price alerts.
- *
- * @todo implement — calls MarketService::updatePrices()
- * Ports: BackendPricesUpdate() + BackendWatchMarkets() — main.sh state 3 (~12 min).
+ * Sync market prices from all active exchanges, then snapshot price/balance history.
+ * Ports: BackendPricesUpdate() + BackendWatchMarkets() — main.sh state 3.
  */
 class UpdatePricesJob extends BaseJob
 {

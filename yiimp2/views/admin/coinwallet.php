@@ -34,8 +34,6 @@ $since = Yii::$app->ConversionUtils->arraySafeVal($_REQUEST,'since', time() - (7
 
 echo '<div id="main_actions">';
 
-//app()->clientScript->registerCoreScript('jquery.ui'); // dialog
-
 echo <<<END
 
 <br/><a class="red" href="/admin/deleteearnings?id={$coin->id}"><b>DELETE EARNINGS</b></a>
@@ -104,37 +102,43 @@ function main_error()
 
 function showSellAmountDialog(marketname, address, marketid, bookmarkid)
 {
-	$("#dlgaddr").html(address);
-	$("#sell-amount-dialog").dialog(
-	{
-    	autoOpen: true,
-		width: 400,
-		height: 240,
-		modal: true,
-		title: 'Send $coin->symbol to '+marketname,
+	marketid   = marketid   || 0;
+	bookmarkid = bookmarkid || 0;
 
-		buttons:
-		{
-			"Send / Sell": function()
-			{
-				amount = $('#input_sell_amount').val();
-				if (marketid > 0)
-					window.location.href = '/market/sellto?id='+marketid+'&amount='+amount;
-				else
-					window.location.href = '/admin/bookmarkSend?id='+bookmarkid+'&amount='+amount;
-			},
-		}
-	});
+	document.getElementById('sell-dialog-title').textContent = 'Send $coin->symbol to ' + marketname;
+	document.getElementById('dlgaddr').textContent = address;
+
+	document.getElementById('btn-sell-confirm').onclick = function() {
+		var amount = document.getElementById('input_sell_amount').value;
+		if (marketid > 0)
+			window.location.href = '/admin/market/sellto?id=' + marketid + '&amount=' + amount;
+		else
+			window.location.href = '/admin/bookmarkSend?id=' + bookmarkid + '&amount=' + amount;
+	};
+
+	new bootstrap.Modal(document.getElementById('sell-amount-dialog')).show();
 	return false;
 }
 
 </script>
 
-<div id="sell-amount-dialog" style="display: none;">
-<br>
-Address: <span id="dlgaddr">xxxxxxxxxxxx</span><br><br>
-Amount: <input type=text id="input_sell_amount" value="$sellamount">
-<br>
+<div class="modal fade" id="sell-amount-dialog" tabindex="-1" aria-labelledby="sell-dialog-title" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="sell-dialog-title">Send to Exchange</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p>Address: <span id="dlgaddr"></span></p>
+        Amount: <input type="text" id="input_sell_amount" class="form-control mt-1" value="$sellamount">
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" id="btn-sell-confirm">Send / Sell</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 END;

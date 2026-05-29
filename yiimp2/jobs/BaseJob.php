@@ -40,7 +40,7 @@ abstract class BaseJob implements JobInterface
             );
         } finally {
             $elapsed = microtime(true) - $t;
-            Yii::debug(sprintf('[%s] done in %.3fs', $name, $elapsed), 'queue');
+            Yii::info(sprintf('[%s] done in %.3fs', $name, $elapsed), 'queue');
 
             // Record last-run time for the web Jobs UI
             Yii::$app->cache->set(JobRegistry::lastRunKey($name), time(), 7 * 86400);

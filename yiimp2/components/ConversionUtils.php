@@ -20,12 +20,12 @@ class ConversionUtils extends Component
 		if(!$target) return 0;
 
 		$d = (double) 0x0000ffff00000000/$target;
-		return round_difficulty($d);
+		return $this->round_difficulty($d);
 	}
 
 	public function decode_compact($input)
 	{
-		$c = htoi($input);
+		$c = $this->htoi($input);
 
 		$nShift = ($c >> 24) & 0xff;
 		$d = 0x0000ffff / ($c & 0x00ffffff);
@@ -59,7 +59,7 @@ class ConversionUtils extends Component
 			$target += $bytes[$oft+$i] << ((7-$i)*8);
 		}
 
-		return target_to_diff($target);
+		return $this->target_to_diff($target);
 	}
 
 	public function htoi($s)
@@ -79,9 +79,6 @@ class ConversionUtils extends Component
 
 			else if($s[$x]>='A' && $s[$x] <='F')
 			{
-				debuglog($s[$x]);
-				debuglog($s[$x] - chr('A'));
-
 				$val = $val * 16 + ord($s[$x]) - ord('A') + 10;
 			}
 
@@ -129,7 +126,7 @@ class ConversionUtils extends Component
 	public function timestampfromstr($str)
 	{
 		if (strpos("$str", ':')) {
-			$dt = DateTime::createFromFormat('Y-m-d H:i:s e', $str);
+			$dt = \DateTime::createFromFormat('Y-m-d H:i:s e', $str);
 			if (is_object($dt))
 				return $dt->getTimestamp();
 		}
@@ -139,12 +136,12 @@ class ConversionUtils extends Component
 	public function datetoa($d)
 	{
 		if (strpos($d, ':')) {
-			$d = timestampfromstr($d);
+			$d = $this->timestampfromstr($d);
 		}
 
 		if(empty($d)) return '';
 
-		$t = wp_mktime($d);
+		$t = $this->wp_mktime($d);
 		$e = time() - $t;
 
 		$table = array(
@@ -173,7 +170,7 @@ class ConversionUtils extends Component
 	public function datetoa2($d)
 	{
 		if (strpos($d, ':')) {
-			$d = timestampfromstr($d);
+			$d = $this->timestampfromstr($d);
 		}
 
 		if(empty($d)) return '';
@@ -347,7 +344,7 @@ class ConversionUtils extends Component
 		$text = preg_replace('/\@([a-zA-Z0-9_Ã‡-Ã ]*)/',
 				"<a href='https://twitter.com/$1' target='_blank'>@$1</a> ", $text);
 
-		$text = force_wordbreak($text, 80);
+		$text = function_exists('force_wordbreak') ? \force_wordbreak($text, 80) : wordwrap($text, 80, "\n", true);
 		return $text;
 	}
 

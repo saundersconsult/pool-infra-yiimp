@@ -2,14 +2,11 @@
 
 namespace app\jobs\system;
 
-use Yii;
 use app\jobs\BaseJob;
 
 /**
- * Update benchmark chip data for algo profitability calculations.
- *
- * @todo implement — calls BenchService::updateChips()
- * Ports: BenchUpdateChips() — main.sh state 7 (~12 min).
+ * Clean benchmark records, resolve chip names, and sync the bench_chips table.
+ * Ports: BenchUpdateChips() — main.sh state 7.
  */
 class BenchUpdateJob extends BaseJob
 {

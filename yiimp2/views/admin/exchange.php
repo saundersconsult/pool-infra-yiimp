@@ -30,7 +30,7 @@ function main_refresh()
 	var url = "/admin/exchange_results";
 
 	clearTimeout(main_timeout);
-	$.get(url, '', main_ready).error(main_error);
+	$.get(url, '', main_ready).fail(main_error);
 }
 
 </script>

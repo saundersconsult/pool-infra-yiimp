@@ -36,7 +36,7 @@ function main_refresh()
 	$('#main_results').css({'min-height': minh + 'px'});
 
 	clearTimeout(main_timeout);
-	$.get(url, '', main_ready).error(main_error);
+	$.get(url, '', main_ready).fail(main_error);
 }
 
 </script>

@@ -79,6 +79,7 @@ $list = Blocks::find()
 foreach($list as $item)
 {
 	$coin = Coins::find()->where(['id' => $item['coin_id']])->one();
+	if (!$coin) continue;
 
 	$id = $coin->id;
 	$main_ids[$id] = $coin->symbol;

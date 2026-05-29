@@ -2,7 +2,6 @@
 
 /** @var yii\web\View $this */
 
-use Yii;
 use yii\helpers\Html;
 
 use app\models\Balances;
@@ -16,6 +15,7 @@ use app\models\Stratums;
 use app\models\Workers;
 
 $mining = Mining::find()->one();
+if (!$mining) $mining = new Mining(['usdbtc' => 0]);
 
 $showrental = (bool) YIIMP_RENTAL;
 
@@ -375,9 +375,7 @@ $t = time() - 48*60*60;
 $altmarkets = (new \yii\db\Query())
 					->select(['B.name','SUM((markets.balance+markets.ontrade)*markets.price) AS balance'])
 					->from('balances as B')
-					->leftJoin('markets','markets.name = B.name')
-					->where(['IFNULL(markets.deleted,0)' => 0])
-					->andWhere(['in', "IFNULL(markets.base_coin,'BTC')", ['','BTC']])
+					->leftJoin('markets', "markets.name = B.name AND IFNULL(markets.deleted,0) = 0 AND IFNULL(markets.base_coin,'BTC') IN ('','BTC')")
 					->groupBy('B.name')
 					->orderBy('B.name')
 					->all();
@@ -487,6 +485,7 @@ foreach($list as $market)
 	$coin = Coins::find()
 				->where(['id' => $market->coinid])
 				->one();
+	if (!$coin) continue;
 
 	$marketurl = Yii::$app->YiimpUtils->getMarketUrl($coin, $market->name);
 
@@ -600,55 +599,8 @@ echo '</td><td>&nbsp;&nbsp;</td><td valign="top">';
 
 //////////////////////////////////////////////////////////////////////////////////
 
-function cronstate2text($state)
-{
-	switch($state - 1)
-	{
-		case 0:
-			return 'new coins';
-		case 1:
-			return 'trade';
-		case 2:
-			return 'trade2';
-		case 3:
-			return 'prices';
-		case 4:
-			return 'blocks';
-		case 5:
-			return 'sell';
-		case 6:
-			return 'find2';
-		case 7:
-			return 'notify';
-		default:
-			return '';
-	}
-}
-
-$state_main = (int) Yii::$app->cache->get('cronjob_main_state');
 $btc = Coins::find()->where(['symbol' => 'BTC'])->one();
 if (!$btc) $btc = json_decode('{"id": 6, "balance": 0}');
-
-echo '<span style="font-weight: bold; color: red;">';
-for($i=0; $i<10; $i++)
-{
-	if($i != $state_main-1 && $state_main>0)
-	{
-		$state = Yii::$app->cache->get("cronjob_main_state_$i");
-		if($state) echo "main $i ";
-	}
-}
-
-echo '</span>';
-
-$block_time = Yii::$app->ConversionUtils->sectoa(time()-Yii::$app->cache->get("cronjob_block_time_start"));
-$loop2_time = Yii::$app->ConversionUtils->sectoa(time()-Yii::$app->cache->get("cronjob_loop2_time_start"));
-$main_time2 = Yii::$app->ConversionUtils->sectoa(time()-Yii::$app->cache->get("cronjob_main_time_start"));
-
-$main_time = Yii::$app->ConversionUtils->sectoa(Yii::$app->cache->get("cronjob_main_time"));
-$main_text = cronstate2text($state_main);
-
-echo "*** main  ($main_time) $state_main $main_text ($main_time2), loop2 ($loop2_time), block ($block_time)<br>";
 
 //Todo: take other currencies too
 $topay = (new \yii\db\Query())
@@ -670,7 +622,7 @@ $renter = (new \yii\db\Query())
 				->from('renters')
 				->scalar();
 $stats = Stats::find()->orderBy('time desc')->one();
-$margin2 = Yii::$app->ConversionUtils->bitcoinvaluetoa($btc->balance - $topay - $renter + $stats->balances + $stats->onsell + $stats->wallets);
+$margin2 = Yii::$app->ConversionUtils->bitcoinvaluetoa($btc->balance - $topay - $renter + ($stats ? $stats->balances + $stats->onsell + $stats->wallets : 0));
 
 $margin = Yii::$app->ConversionUtils->bitcoinvaluetoa($btc->balance - $topay - $renter);
 

@@ -1,8 +1,47 @@
 <?php
 
 use app\models\Coins;
+use app\models\Markets;
 use app\models\Orders;
 use app\models\Exchange_deposit;
+
+// Stuck markets: sent more than 2h ago but not yet traded
+$minsent = time() - 2 * 60 * 60;
+$stuckMarkets = Markets::find()
+    ->where('lastsent < :minsent AND lastsent > lasttraded', [':minsent' => $minsent])
+    ->orderBy('lastsent')
+    ->all();
+
+if ($stuckMarkets) {
+    echo "<br><table class='dataGrid'>";
+    echo "<thead><tr>";
+    echo "<th width=20></th>";
+    echo "<th>Name</th>";
+    echo "<th>Exchange</th>";
+    echo "<th>Sent</th>";
+    echo "<th>Traded</th>";
+    echo "<th></th>";
+    echo "</tr></thead><tbody>";
+
+    foreach ($stuckMarkets as $market) {
+        $coin = Coins::findOne($market->coinid);
+        if (!$coin) continue;
+        $marketurl = Yii::$app->YiimpUtils->getMarketUrl($coin, $market->name);
+        $coinimg = \yii\helpers\Html::img(\yii\helpers\Html::encode($coin->image), ['alt' => \yii\helpers\Html::encode($coin->symbol), 'width' => 16]);
+        $sent    = Yii::$app->ConversionUtils->datetoa2($market->lastsent) . ' ago';
+        $traded  = Yii::$app->ConversionUtils->datetoa2($market->lasttraded) . ' ago';
+        echo "<tr class='ssrow'>";
+        echo "<td>$coinimg</td>";
+        echo "<td><b><a href='/admin/coin?id=$coin->id'>$coin->name ($coin->symbol)</a></b></td>";
+        echo "<td><b><a href='$marketurl' target='_blank'>$market->name</a></b></td>";
+        echo "<td>$sent</td>";
+        echo "<td>$traded</td>";
+        echo "<td><a href='/admin/clearmarket?id=$market->id'>[clear]</a></td>";
+        echo "</tr>";
+    }
+
+    echo "</tbody></table>";
+}
 
 $orders = Orders::find()->orderBy('(amount*bid) desc')->all();
 
@@ -56,7 +95,8 @@ foreach($orders as $order)
 	echo $bidvalue>0.01? "<td><b>$bidvalue</b></td>": "<td>$bidvalue</td>";
 
  	echo "<td>";
- 	echo "<a href='/admin/cancelorder?id=$order->id'>[cancel]</a> ";
+ 	echo "<a href='/admin/cancelorder?id=$order->id' title='Cancel on exchange'>[cancel]</a> ";
+ 	echo "<a href='/admin/clearorder?id=$order->id' title='Remove from DB only'>[clear]</a>";
 // 	echo "<a href='/admin/sellorder?id=$order->id'>[sell]</a>";
  	echo "</td>";
 	echo "</tr>";
@@ -101,7 +141,7 @@ foreach($exchanges_deposits as $exchange_deposit)
 	$lowsymbol = strtolower($coin->symbol);
 	$coinimg = \yii\helpers\Html::img(\yii\helpers\Html::encode($coin->image), ['alt' => \yii\helpers\Html::encode($coin->symbol), 'width' => 16]);
 
-	$marketurl = getMarketUrl($coin, $exchange_deposit->market);
+	$marketurl = Yii::$app->YiimpUtils->getMarketUrl($coin, $exchange_deposit->market);
 
 	if($exchange_deposit->status == 'waiting')
 		echo "<tr style='background-color: #e0d3e8;'>";

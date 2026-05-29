@@ -1,7 +1,7 @@
 <?php
 
 // include serverconfig
-require_once('/etc/yiimp/serverconfig.php');
+require_once(file_exists('/etc/yiimp/serverconfig.php') ? '/etc/yiimp/serverconfig.php' : 'serverconfig.php');
 require_once(__DIR__ . '/constants.php');   // promote YAAMP_* → YIIMP_* if serverconfig is old
 
 if (defined('YIIMP_DEBUG') && (YIIMP_DEBUG === true)) {
@@ -87,6 +87,9 @@ $config = [
             'enablePrettyUrl' => true,
             'showScriptName' => false,
             'rules' => [
+                // Market actions live under /admin/market/* for access-control clarity
+                'admin/market/<action:\w+>' => 'market/<action>',
+
                 // Map the legacy camelCase/underscore API URLs to Yii2 hyphenated action IDs
                 'api/walletEx'        => 'api/wallet-ex',
                 'api/walletex'        => 'api/wallet-ex',

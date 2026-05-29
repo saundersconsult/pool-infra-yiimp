@@ -2,17 +2,13 @@
 
 namespace app\jobs\market;
 
-use Yii;
 use app\jobs\BaseJob;
+use app\services\MarketService;
 
 /**
- * Execute automated trading on all configured exchanges
- * (Binance, KuCoin, Yobit, Nestex, Nonkyc, Tradeogre).
- * Production-only.
- *
- * @todo implement — calls MarketService::doTrading()
+ * Execute automated trading on Binance, KuCoin, Yobit, Nestex, and Nonkyc.
  * Ports: doBinanceTrading() + doKuCoinTrading() + doYobitTrading() + others
- * main.sh state 2 (~12 min, prod only).
+ * main.sh state 2 (prod only).
  */
 class TradingJob extends BaseJob
 {
@@ -23,7 +19,6 @@ class TradingJob extends BaseJob
         if (!defined('YIIMP_PRODUCTION') || !YIIMP_PRODUCTION) {
             return;
         }
-        // TODO: (new \app\services\MarketService())->doTrading();
-        Yii::warning('TradingJob: not yet implemented (pending MarketService)', 'queue');
+        (new MarketService())->doTrading();
     }
 }
