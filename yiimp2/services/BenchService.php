@@ -80,14 +80,7 @@ class BenchService
                 continue;
             }
 
-            // Resolve chip name via legacy bench module function
-            $chip = null;
-            if (function_exists('getChipName')) {
-                $chip = getChipName($bench->getAttributes());
-            } else {
-                Yii::warning('BenchService: getChipName() not available — skipping chip resolution (pending bench module port)', __CLASS__);
-                break; // no point continuing without the function
-            }
+            $chip = $this->getChipName($bench->getAttributes());
 
             if (empty($chip) || $chip === '-') {
                 continue;
@@ -170,5 +163,173 @@ class BenchService
                 [':id' => $chipRecord->id, ':chip' => $row['chip'], ':type' => $row['type']]
             )->execute();
         }
+    }
+
+    // =========================================================================
+    // Display helpers (ported from web/yaamp/modules/bench/functions.php)
+    // =========================================================================
+
+    public static function formatCudaArch(string $arch): string
+    {
+        if (is_numeric($arch)) {
+            $a = (int) $arch;
+            return 'SM ' . floor($a / 100) . '.' . (($a % 100) / 10);
+        }
+        if (str_contains($arch, '@')) {
+            [$a, $b] = array_map('intval', explode('@', $arch, 2));
+            return 'SM ' . floor($a / 100) . '.' . (($a % 100) / 10)
+                 . '@' . floor($b / 100) . '.' . (($b % 100) / 10);
+        }
+        return $arch;
+    }
+
+    public static function formatGPU(array $row): string
+    {
+        return strip_tags($row['device'] . self::getProductIdSuffix($row));
+    }
+
+    public static function formatDevice(array $row): string
+    {
+        return $row['type'] === 'gpu' ? self::formatGPU($row) : self::formatCPUPublic($row);
+    }
+
+    /** Power cost in mBTC/day for the given wattage. */
+    public static function powercostMbtc(float $watts, float $btcusd): float
+    {
+        $kwh = defined('YIIMP_KWH_USD_PRICE') ? (float) YIIMP_KWH_USD_PRICE : 0.25;
+        return $btcusd > 0 ? ($kwh * 24 * $watts) / $btcusd : 0.0;
+    }
+
+    private static function getProductIdSuffix(array $row): string
+    {
+        $known = [
+            '1043:8520' => ' Strix', '1043:8508' => ' Strix',
+            '1458:362d' => ' OC',    '1458:3649' => ' Black',
+            '1458:36ae' => ' 4GB',   '1458:3701' => ' G1',
+            '1458:3702' => ' G1',    '1462:3202' => ' Gaming 2G',
+            '1462:3160' => ' Gaming', '1462:3170' => ' Gaming',
+            '1462:3301' => ' Armor', '1462:3306' => ' Gaming X',
+            '1462:3362' => ' Gaming', '19da:1435' => ' Extreme',
+            '3842:2744' => ' SC DDR3', '3842:3753' => ' SC',
+            '3842:3757' => ' FTW',   '3842:2951' => ' SC',
+            '3842:2956' => ' SC+',   '3842:2957' => ' SSC',
+            '3842:2958' => ' FTW',   '3842:2962' => ' SC',
+            '3842:2966' => ' SSC',   '3842:3966' => ' SSC 4GB',
+            '3842:2974' => ' SC',    '3842:2978' => ' FTW',
+            '3842:3975' => ' SSC',   '3842:2983' => ' SC',
+            '3842:2986' => ' FTW',   '3842:2989' => ' Hydro',
+            '3842:4995' => ' SC+',   '3842:1996' => ' Hybrid',
+            '3842:6173' => ' SC',    '3842:6276' => ' FTW',
+        ];
+        $vid = $row['vendorid'] ?? '';
+        if (isset($known[$vid])) return $known[$vid];
+        $suffix = \Yii::$app->db->createCommand(
+            'SELECT suffix FROM bench_suffixes WHERE vendorid = :v', [':v' => $vid]
+        )->queryScalar();
+        return $suffix ? ' ' . $suffix : '';
+    }
+
+    /** Public wrapper for formatCPU so views can call it without instantiating the service. */
+    public static function formatCPUPublic(array $row): string
+    {
+        return (new self())->formatCPU($row);
+    }
+
+    // =========================================================================
+    // Chip name resolution (ported from web/yaamp/modules/bench/functions.php)
+    // =========================================================================
+
+    private function getChipName(array $row): string
+    {
+        if ($row['type'] === 'cpu') {
+            $device = $this->formatCPU($row);
+            $device = str_ireplace(' V2', 'v2', $device);
+            $device = str_ireplace(' V3', 'v3', $device);
+            $device = str_ireplace(' V4', 'v4', $device);
+            $device = str_ireplace(' V5', 'v5', $device);
+            if (str_contains($device, 'AMD Athlon ')) {
+                return str_replace('AMD ', '', $device);
+            }
+            $device = preg_replace('/AMD (A6\-[1-9]+[KM]*) APU .+/', '\1', $device);
+            $device = preg_replace('/AMD (E[\d]*\-[\d]+) APU .+/', '\1', $device);
+            $device = preg_replace('/AMD (A[\d]+\-[\d]+[KP]*) Radeon .+/', '\1', $device);
+            $words = explode(' ', $device);
+            $chip  = array_pop($words);
+            if (str_contains($device, 'Fam.')) $chip = '-';
+        } else {
+            $device = str_replace(' with Max-Q Design', '', $row['device']);
+            $device = str_replace(' COLLECTORS EDITION', '', $device);
+            $words  = explode(' ', $device);
+            $chip   = array_pop($words);
+            if (!is_numeric($chip)) {
+                $chip = array_pop($words) . ' ' . $chip;
+                $chip = str_replace('GeForce ', '', $chip);
+                $chip = str_replace('GT ', '', $chip);
+                $chip = str_replace('GTX ', '', $chip);
+                $chip = str_replace('650 Ti BOOST', '650 Ti', $chip);
+                $chip = str_replace('760 Ti OEM', '760 Ti', $chip);
+                $chip = str_replace(' (Pascal)', ' Pascal', $chip);
+                $chip = str_replace('Quadro M6000 24GB', 'Quadro M6000', $chip);
+                $chip = str_replace('Tesla P100 (PCIe)', 'Tesla P100', $chip);
+                $chip = str_replace('Tesla P100-SXM2-16GB', 'Tesla P100', $chip);
+                $chip = str_replace('Tesla P100-PCIE-16GB', 'Tesla P100', $chip);
+                $chip = str_replace('Tesla V100-SXM2-16GB', 'Tesla V100', $chip);
+                $chip = preg_replace('/ASUS ([6-9]\d\dM)/', '\1', $chip);
+                $chip = preg_replace('/MSI ([6-9]\d\dM)/', '\1', $chip);
+                $chip = preg_replace('/MSI ([6-9]\d\dMX)/', '\1', $chip);
+                if (str_contains($chip, 'P106-100') || str_contains($chip, 'CMP3-1')) $chip = 'P106-100';
+                if (str_contains($chip, 'P104-100') || str_contains($chip, 'CMP4-1')) $chip = 'P104-100';
+            }
+            if (str_contains($row['device'], 'Quadro') && !str_contains($chip, 'Quadro')) {
+                $chip = "Quadro $chip";
+            }
+        }
+
+        return $chip ?? '';
+    }
+
+    private function formatCPU(array $row): string
+    {
+        $device = preg_replace('/[ \t]+/', ' ', $row['device']);
+        if (str_contains($device, '(R)')) {
+            $device = str_replace('(R)', '', $device);
+            $device = str_replace(' CPU', '', $device);
+            $device = str_replace(' V2', ' v2', $device);
+            $device = str_replace(' V3', ' v3', $device);
+            $device = str_replace(' V4', ' v4', $device);
+        } else {
+            $device = str_replace(' Family', '', $device);
+            $device = str_replace(' Stepping ', '.', $device);
+            $device = str_replace(' GenuineIntel', ' Intel', $device);
+            $device = str_replace(' AuthenticAMD', ' AMD', $device);
+            $device = str_replace(' Quad-Core', '', $device);
+            $device = str_replace(' Dual-Core', '', $device);
+            $device = str_replace(' Triple-Core', '', $device);
+            $device = str_replace(' Quad Core', '', $device);
+            $device = str_replace(' Dual Core', '', $device);
+            $device = str_replace(' Triple Core', '', $device);
+            $device = str_replace(' Processor', '', $device);
+            if (str_contains($device, 'Intel64') && str_contains($device, ' Intel')) {
+                $device = str_replace(' Intel', '', $device);
+                $device = str_replace('Intel64', 'Intel', $device);
+            }
+            if (str_contains($device, 'AMD64') && str_contains($device, ' AMD')) {
+                $device = str_replace(' AMD', '', $device);
+                $device = str_replace('AMD64', 'AMD', $device);
+            }
+            $device = rtrim($device, ',');
+        }
+        $device = str_ireplace('(tm)', '', $device);
+        $device = str_replace(' APU with Radeon', '', $device);
+        $device = str_replace(' APU with AMD Radeon', '', $device);
+        $device = str_replace(' version ', ' ', $device);
+        $device = str_replace(' Core2 Quad', ' Core2-Quad', $device);
+        $device = preg_replace('/(HD|R\d) Graphics/', '', $device);
+        $device = preg_replace('/ 0$/', '', $device);
+        $device = str_replace(' (1.6GHz Capable)', '', $device);
+        if (stristr($device, 'Virtual CPU') || stristr($device, 'QEMU')) {
+            $device = 'Virtual';
+        }
+        return trim($device);
     }
 }

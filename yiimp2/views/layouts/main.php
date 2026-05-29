@@ -56,6 +56,14 @@ $this->registerLinkTag(['rel' => 'icon', 'type' => 'image/x-icon', 'href' => Yii
             ['label' => 'Explorers', 'url' => ['/explorer'], 'active' => in_array(\Yii::$app->controller->id, ['explorer']),],
     ];
 
+    if (defined('YIIMP_PUBLIC_BENCHMARK') && YIIMP_PUBLIC_BENCHMARK) {
+        $items_navbar[] = [
+            'label'  => 'Benchmarks',
+            'url'    => ['/bench'],
+            'active' => \Yii::$app->controller->id === 'bench',
+        ];
+    }
+
     if ((!is_null(Yii::$app->user->identity)) && (Yii::$app->user->identity->is_admin)) {
         $admin_navbar = [
             '&nbsp;&nbsp;&nbsp;&nbsp;',

@@ -20,7 +20,7 @@ $_bridge = [
     'ADMIN_EMAIL', 'ADMIN_USER', 'ADMIN_PASS',
     'ADMIN_IP', 'ADMIN_WEBCONSOLE',
     'CREATE_NEW_COINS', 'NOTIFY_NEW_COINS', 'DEFAULT_ALGO',
-    'USE_NGINX', 'USE_NICEHASH_API',
+    'USE_NGINX', 'USE_NICEHASH_API', 'PUBLIC_BENCHMARK',
 ];
 foreach ($_bridge as $_k) {
     if (!defined("YIIMP_{$_k}") && defined("YAAMP_{$_k}")) {
@@ -28,3 +28,5 @@ foreach ($_bridge as $_k) {
     }
 }
 unset($_bridge, $_k);
+
+if (!defined('YIIMP_KWH_USD_PRICE')) define('YIIMP_KWH_USD_PRICE', 0.25);

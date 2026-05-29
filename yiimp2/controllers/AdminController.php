@@ -780,6 +780,16 @@ class AdminController extends Controller
 
 	/////////////////////////////////////////////////
 
+	public function actionBenchdel(): \yii\web\Response
+	{
+		$this->requireAdmin();
+		$id = (int) Yii::$app->request->get('id');
+		if ($id > 0) {
+			Yii::$app->db->createCommand('DELETE FROM benchmarks WHERE id = :id', [':id' => $id])->execute();
+		}
+		return $this->redirect(Yii::$app->request->referrer ?: ['/bench']);
+	}
+
 	/** Abort with 403 if the current user is not an admin. */
 	private function requireAdmin(): void
 	{
