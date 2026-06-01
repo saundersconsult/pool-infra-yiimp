@@ -355,6 +355,13 @@ class SiteController extends Controller
      *
      * @return string
      */
+	public function actionMaintenance(): string
+	{
+		$this->layout = false;
+		Yii::$app->response->statusCode = 503;
+		return $this->render('maintenance');
+	}
+
 	public function actionBenchmarks()
 	{
 		return $this->render('benchmarks');

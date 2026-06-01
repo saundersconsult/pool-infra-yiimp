@@ -64,6 +64,14 @@ $this->registerLinkTag(['rel' => 'icon', 'type' => 'image/x-icon', 'href' => Yii
         ];
     }
 
+    if (defined('YIIMP_RENTAL') && YIIMP_RENTAL) {
+        $items_navbar[] = [
+            'label'  => 'Rental',
+            'url'    => ['/renting'],
+            'active' => \Yii::$app->controller->id === 'renting',
+        ];
+    }
+
     if ((!is_null(Yii::$app->user->identity)) && (Yii::$app->user->identity->is_admin)) {
         $admin_navbar = [
             '&nbsp;&nbsp;&nbsp;&nbsp;',
@@ -72,6 +80,16 @@ $this->registerLinkTag(['rel' => 'icon', 'type' => 'image/x-icon', 'href' => Yii
             ['label' => 'Coins',     'url' => ['/admin/coinlist']],
             ['label' => 'Jobs',      'url' => ['/jobs/index'],
              'active' => \Yii::$app->controller->id === 'jobs'],
+            ...(defined('YIIMP_RENTAL') && YIIMP_RENTAL ? [[
+                'label'  => 'Renting',
+                'url'    => ['/renting/admin'],
+                'active' => \Yii::$app->controller->id === 'renting',
+            ]] : []),
+            ...(defined('YIIMP_USE_NICEHASH_API') && YIIMP_USE_NICEHASH_API ? [[
+                'label'  => 'NiceHash',
+                'url'    => ['/nicehash'],
+                'active' => \Yii::$app->controller->id === 'nicehash',
+            ]] : []),
              '<li class="nav-item">'
                     . Html::beginForm(['/admin/logout'])
                     . Html::submitButton(

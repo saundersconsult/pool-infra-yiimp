@@ -9,6 +9,8 @@ use app\models\Markets;
 
 class ShapeShiftDriver extends ExchangeDriver
 {
+    private const BASE = 'https://shapeshift.io';
+
     public function name(): string { return 'shapeshift'; }
     public function supportsMarkets(): bool  { return true; }
     public function supportsDiscover(): bool { return true; }
@@ -16,18 +18,15 @@ class ShapeShiftDriver extends ExchangeDriver
     public function updateMarkets(): void
     {
         if ($this->isDisabled()) return;
-        if (!function_exists('shapeshift_api_query')) {
-            Yii::warning('shapeshift: shapeshift_api_query not available', __CLASS__);
-            return;
-        }
 
         $list = Markets::find()->where(['like', 'name', 'shapeshift%', false])->all();
         if (empty($list)) return;
-        $markets = shapeshift_api_query('marketinfo');
+
+        $markets = $this->apiGet('marketinfo');
         if (!is_array($markets) || empty($markets)) return;
 
         foreach ($list as $market) {
-            $coin = Coins::findOne((int) $market->coinid);
+            $coin = Coins::findOne((int)$market->coinid);
             if (!$coin) continue;
             if ($this->marketDisabled($coin->symbol, $market)) continue;
 
@@ -38,8 +37,8 @@ class ShapeShiftDriver extends ExchangeDriver
 
             foreach ($markets as $ticker) {
                 if ($ticker['pair'] !== $pair) continue;
-                $market->price     = $this->averageIncrement((float) $market->price,  (float) $ticker['rate']);
-                $market->price2    = $this->averageIncrement((float) $market->price2, (float) $ticker['rate']);
+                $market->price     = $this->averageIncrement((float)$market->price,  (float)$ticker['rate']);
+                $market->price2    = $this->averageIncrement((float)$market->price2, (float)$ticker['rate']);
                 $market->txfee     = $ticker['minerFee'] * 100;
                 $market->pricetime = time();
                 $market->priority  = -1;
@@ -55,15 +54,24 @@ class ShapeShiftDriver extends ExchangeDriver
 
     public function discoverCoins(): void
     {
-        if ($this->isDisabled() || !function_exists('shapeshift_api_query')) return;
+        if ($this->isDisabled()) return;
 
-        $list = shapeshift_api_query('getcoins');
+        $list = $this->apiGet('getcoins');
         if (!is_array($list) || empty($list)) return;
 
         $this->softDeleteMarkets();
         foreach ($list as $item) {
-            if ($item['status'] !== 'available') continue;
+            if (($item['status'] ?? '') !== 'available') continue;
             $this->upsertMarket(strtoupper($item['symbol']), trim($item['name']));
         }
+    }
+
+    // ── Private helpers ───────────────────────────────────────────────────────
+
+    private function apiGet(string $method, string $param = ''): mixed
+    {
+        $url = self::BASE . '/' . $method . ($param !== '' ? '/' . $param : '');
+        $raw = $this->curlRequest('GET', $url);
+        return $raw ? json_decode($raw, true) : null;
     }
 }

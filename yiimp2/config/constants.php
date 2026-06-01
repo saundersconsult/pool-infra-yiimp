@@ -29,4 +29,7 @@ foreach ($_bridge as $_k) {
 }
 unset($_bridge, $_k);
 
-if (!defined('YIIMP_KWH_USD_PRICE')) define('YIIMP_KWH_USD_PRICE', 0.25);
+if (!defined('YIIMP_KWH_USD_PRICE'))        define('YIIMP_KWH_USD_PRICE',        0.25);
+if (!defined('YIIMP_CLI_ALLOW_TXS'))        define('YIIMP_CLI_ALLOW_TXS',        false);
+if (!defined('YIIMP_CLI_ALLOW_DISTCLEAN'))  define('YIIMP_CLI_ALLOW_DISTCLEAN',  false);
+if (!defined('YIIMP_MAINTENANCE_MODE'))     define('YIIMP_MAINTENANCE_MODE',     false);

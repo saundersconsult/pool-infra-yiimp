@@ -107,9 +107,17 @@ $countMissing  = count(array_filter($jobs, fn($j) => $j['status'] === 'not_seede
 <?php foreach ($grouped as $domain => $domainJobs):
     $label = $domainLabels[$domain] ?? ucfirst($domain);
 ?>
-<table class="table table-sm table-bordered jobs-table mb-3">
+<table class="table table-sm table-bordered jobs-table mb-3" style="table-layout:fixed;">
+    <colgroup>
+        <col style="width:auto;">        <!-- Job -->
+        <col style="width:58px;">        <!-- Every -->
+        <col style="width:90px;">        <!-- Status -->
+        <col style="width:72px;">        <!-- Runs in -->
+        <col style="width:88px;">        <!-- Last run -->
+        <col style="width:148px;">       <!-- Actions -->
+    </colgroup>
     <thead>
-        <tr><th colspan="7" class="domain-header"><?= Html::encode($label) ?></th></tr>
+        <tr><th colspan="6" class="domain-header"><?= Html::encode($label) ?></th></tr>
         <tr class="table-light">
             <th>Job</th>
             <th>Every</th>

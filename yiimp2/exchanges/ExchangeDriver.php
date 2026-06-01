@@ -45,7 +45,7 @@ abstract class ExchangeDriver
 
     final protected function config(string $key, mixed $default = ''): mixed
     {
-        return function_exists('exchange_get') ? exchange_get($this->name(), $key, $default) : $default;
+        return Yii::$app->settings->exchangeGet($this->name(), $key, $default);
     }
 
     final protected function configFloat(string $key, float $default): float
@@ -55,12 +55,12 @@ abstract class ExchangeDriver
 
     final protected function isDisabled(): bool
     {
-        return function_exists('exchange_get') && (bool) exchange_get($this->name(), 'disabled');
+        return (bool) Yii::$app->settings->exchangeGet($this->name(), 'disabled', false);
     }
 
     final protected function marketDisabled(string $symbol, Markets $market): bool
     {
-        if (function_exists('market_get') && market_get($this->name(), $symbol, 'disabled')) {
+        if (Yii::$app->settings->marketGet($this->name(), $symbol, 'disabled')) {
             $market->disabled = 1;
             $market->message  = 'disabled from settings';
             $market->save();
@@ -124,7 +124,7 @@ abstract class ExchangeDriver
             if (in_array($exchange, ['askcoin','binance','hitbtc','yobit','kucoin'], true)) {
                 return;
             }
-            if (function_exists('market_get') && market_get($exchange, $symbol, 'disabled')) {
+            if (Yii::$app->settings->marketGet($exchange, $symbol, 'disabled')) {
                 return;
             }
             Yii::info("new coin {$exchange} {$symbol} {$name}", __CLASS__);

@@ -17,16 +17,12 @@ class BiboxDriver extends ExchangeDriver
     public function updateMarkets(): void
     {
         if ($this->isDisabled()) return;
-        if (!function_exists('bibox_api_query')) {
-            Yii::warning('bibox: bibox_api_query not available', __CLASS__);
-            return;
-        }
 
         $count = (int) Yii::$app->db->createCommand("SELECT COUNT(id) FROM markets WHERE name LIKE 'bibox%'")->queryScalar();
         if (!$count) return;
 
-        $list = bibox_api_query('marketAll');
-        if (!is_array($list)) return;
+        $list = $this->apiQuery('marketAll');
+        if (!isset($list['result'])) return;
 
         foreach ($list['result'] as $marketData) {
             if ($marketData['currency_symbol'] !== 'BTC') continue;
@@ -37,10 +33,13 @@ class BiboxDriver extends ExchangeDriver
             if (!$market) continue;
             if ($this->marketDisabled($symbol, $market)) continue;
 
-            $ticker         = bibox_api_query("ticker&pair={$symbol}_BTC")['result'];
-            $price2         = ($ticker['buy'] + $ticker['sell']) / 2;
-            $market->price2 = $this->averageIncrement((float) $market->price2, $price2);
-            $market->price  = $this->averageIncrement((float) $market->price,  (float) $ticker['buy']);
+            $ticker = $this->apiQuery("ticker&pair={$symbol}_BTC");
+            if (!isset($ticker['result'])) continue;
+
+            $t              = $ticker['result'];
+            $price2         = ((float)$t['buy'] + (float)$t['sell']) / 2;
+            $market->price2 = $this->averageIncrement((float)$market->price2, $price2);
+            $market->price  = $this->averageIncrement((float)$market->price,  (float)$t['buy']);
             $market->pricetime = time();
             $market->save();
         }
@@ -48,9 +47,9 @@ class BiboxDriver extends ExchangeDriver
 
     public function discoverCoins(): void
     {
-        if ($this->isDisabled() || !function_exists('bibox_api_query')) return;
+        if ($this->isDisabled()) return;
 
-        $list = bibox_api_query('marketAll');
+        $list = $this->apiQuery('marketAll');
         if (!isset($list['result'])) return;
 
         $this->softDeleteMarkets();
@@ -58,5 +57,15 @@ class BiboxDriver extends ExchangeDriver
             if ($currency['currency_symbol'] === 'BTC') continue;
             $this->upsertMarket($currency['coin_symbol']);
         }
+    }
+
+    // ── Private helpers ───────────────────────────────────────────────────────
+
+    /** Public market data query. SSL verification disabled per legacy behaviour. */
+    private function apiQuery(string $cmd): mixed
+    {
+        $url = "https://api.bibox.com/v1/mdata?cmd={$cmd}";
+        $raw = $this->curlRequest('GET', $url, [], '', false);
+        return $raw ? json_decode($raw, true) : null;
     }
 }

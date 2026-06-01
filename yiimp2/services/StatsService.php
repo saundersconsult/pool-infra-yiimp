@@ -432,69 +432,77 @@ class StatsService
 
     private function hashrateConstant(string $algo): float
     {
-        // YIIMP_hashrate_constant() from web/yaamp/core/functions/yaamp.php
-        if (function_exists('YIIMP_hashrate_constant')) {
-            return (float) YIIMP_hashrate_constant($algo);
-        }
-        return in_array($algo, ['equihash','equihash96','equihash125','equihash144','equihash192'], true)
+        return in_array($algo, ['equihash', 'equihash96', 'equihash125', 'equihash144', 'equihash192'], true)
             ? 0x0000000004000000
             : 0x0000040000000000;
     }
 
     private function hashrateStep(): float
     {
-        // YIIMP_hashrate_step() — typically returns the shares window in seconds
-        if (function_exists('YIIMP_hashrate_step')) {
-            return (float) YIIMP_hashrate_step();
-        }
-        return 900.0; // 15-minute default
+        return 300.0;
     }
 
     private function userRate(int $userId, string $algo): float
     {
-        if (function_exists('YIIMP_user_rate')) {
-            return (float) YIIMP_user_rate($userId, $algo);
-        }
-        // Fallback: compute directly from shares
-        $t = time() - 5 * 60;
-        $diff = (float) Yii::$app->db->createCommand(
+        $interval = $this->hashrateStep();
+        $target   = $this->hashrateConstant($algo);
+        $t        = time() - (int) $interval;
+        $diff     = (float) Yii::$app->db->createCommand(
             "SELECT SUM(difficulty) FROM shares WHERE valid AND userid=:uid AND algo=:algo AND time>:t",
             [':uid' => $userId, ':algo' => $algo, ':t' => $t]
         )->queryScalar();
-        return $diff ? $diff * $this->hashrateConstant($algo) / 300 / 1000 : 0.0;
+        return $diff ? $diff * $target / $interval / 1000 : 0.0;
     }
 
     private function userRateBad(int $userId, string $algo): float
     {
-        if (function_exists('YIIMP_user_rate_bad')) {
-            return (float) YIIMP_user_rate_bad($userId, $algo);
-        }
-        $t = time() - 5 * 60;
-        $diff = (float) Yii::$app->db->createCommand(
-            "SELECT SUM(difficulty) FROM shares WHERE NOT valid AND userid=:uid AND algo=:algo AND time>:t",
+        $interval = $this->hashrateStep();
+        $target   = $this->hashrateConstant($algo);
+        $t        = time() - (int) $interval;
+        $avgDiff  = (float) Yii::$app->db->createCommand(
+            "SELECT AVG(difficulty) FROM shares WHERE valid AND userid=:uid AND algo=:algo AND time>:t",
             [':uid' => $userId, ':algo' => $algo, ':t' => $t]
         )->queryScalar();
-        return $diff ? $diff * $this->hashrateConstant($algo) / 300 / 1000 : 0.0;
+        $count = (float) Yii::$app->db->createCommand(
+            "SELECT COUNT(id) FROM shares WHERE valid != 1 AND userid=:uid AND algo=:algo AND time>:t",
+            [':uid' => $userId, ':algo' => $algo, ':t' => $t]
+        )->queryScalar();
+        return ($avgDiff && $count) ? $count * $avgDiff * $target / $interval / 1000 : 0.0;
     }
 
-    private function jobRate(int $jobId): float
+    public function jobRate(int $jobId): float
     {
-        if (function_exists('YIIMP_job_rate')) {
-            return (float) YIIMP_job_rate($jobId);
-        }
-        $t = time() - 5 * 60;
-        $diff = (float) Yii::$app->db->createCommand(
-            "SELECT SUM(difficulty) FROM jobsubmits WHERE jobid=:jid AND time>:t",
+        $job = Yii::$app->db->createCommand(
+            "SELECT algo FROM jobs WHERE id=:jid", [':jid' => $jobId]
+        )->queryOne();
+        if (!$job) return 0.0;
+        $interval = $this->hashrateStep();
+        $target   = $this->hashrateConstant($job['algo']);
+        $t        = time() - (int) $interval;
+        $diff     = (float) Yii::$app->db->createCommand(
+            "SELECT SUM(difficulty) FROM jobsubmits WHERE valid AND jobid=:jid AND time>:t",
             [':jid' => $jobId, ':t' => $t]
         )->queryScalar();
-        return $diff ? $diff / 300 / 1000 : 0.0;
+        return $diff ? $diff * $target / $interval / 1000 : 0.0;
     }
 
-    private function jobRateBad(int $jobId): float
+    public function jobRateBad(int $jobId): float
     {
-        if (function_exists('YIIMP_job_rate_bad')) {
-            return (float) YIIMP_job_rate_bad($jobId);
-        }
-        return 0.0;
+        $job = Yii::$app->db->createCommand(
+            "SELECT algo FROM jobs WHERE id=:jid", [':jid' => $jobId]
+        )->queryOne();
+        if (!$job) return 0.0;
+        $interval = $this->hashrateStep();
+        $target   = $this->hashrateConstant($job['algo']);
+        $t        = time() - (int) $interval;
+        $avgDiff  = (float) Yii::$app->db->createCommand(
+            "SELECT AVG(difficulty) FROM jobsubmits WHERE valid AND jobid=:jid AND time>:t",
+            [':jid' => $jobId, ':t' => $t]
+        )->queryScalar();
+        $count = (float) Yii::$app->db->createCommand(
+            "SELECT COUNT(id) FROM jobsubmits WHERE valid != 1 AND jobid=:jid AND time>:t",
+            [':jid' => $jobId, ':t' => $t]
+        )->queryScalar();
+        return ($avgDiff && $count) ? $count * $avgDiff * $target / $interval / 1000 : 0.0;
     }
 }

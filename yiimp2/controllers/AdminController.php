@@ -152,6 +152,12 @@ class AdminController extends Controller
     /////////////////////////////////////////////////
     /* version breakdown */
 
+    public function actionConfig(): string
+    {
+        $this->requireAdmin();
+        return $this->render('config');
+    }
+
     public function actionVersion(): string
     {
         $this->requireAdmin();

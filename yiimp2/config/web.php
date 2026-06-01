@@ -38,6 +38,21 @@ $config = [
     'id' => 'basic',
     'basePath' => dirname(__DIR__),
     'bootstrap' => ['log', 'queue'],
+    // Global maintenance-mode guard — fires before every action.
+    // Bypassed for admins and for the maintenance page itself.
+    // Enable by setting YIIMP_MAINTENANCE_MODE = true in serverconfig.php.
+    'on beforeAction' => function (\yii\base\ActionEvent $event) {
+        if (!defined('YIIMP_MAINTENANCE_MODE') || !YIIMP_MAINTENANCE_MODE) return;
+        if (!Yii::$app->user->isGuest && (Yii::$app->user->identity?->is_admin ?? false)) return;
+        if ($event->action->uniqueId === 'site/maintenance') return;
+
+        $event->isValid = false;
+        Yii::$app->response->statusCode = 503;
+        ob_start();
+        include Yii::getAlias('@app/views/site/maintenance.php');
+        Yii::$app->response->content = ob_get_clean();
+        Yii::$app->end();
+    },
     'aliases' => [
         '@bower' => '@vendor/bower-asset',
         '@npm'   => '@vendor/npm-asset',
@@ -100,6 +115,9 @@ $config = [
             ],
         ],
 
+        'settings' => [
+            'class' => \app\services\SettingsService::class,
+        ],
         'YiimpUtils' => [
             'class' => 'app\components\YiimpUtils',
         ],

@@ -344,7 +344,7 @@ class ConversionUtils extends Component
 		$text = preg_replace('/\@([a-zA-Z0-9_Ã‡-Ã ]*)/',
 				"<a href='https://twitter.com/$1' target='_blank'>@$1</a> ", $text);
 
-		$text = function_exists('force_wordbreak') ? \force_wordbreak($text, 80) : wordwrap($text, 80, "\n", true);
+		$text = $this->forceWordbreak($text, 80);
 		return $text;
 	}
 
@@ -378,6 +378,22 @@ class ConversionUtils extends Component
 		elseif (is_object($arr))
 			return $this->objSafeVal($arr,$key,$default);
 		return $default;
+	}
+
+	/** Insert a space whenever a word runs longer than $max chars (ported from legacy force_wordbreak). */
+	private function forceWordbreak(string $text, int $max): string
+	{
+		$last = 0;
+		for ($i = 0; $i < strlen($text); $i++) {
+			if ($text[$i] === ' ') {
+				$last = $i;
+			} elseif ($i - $last > $max) {
+				$text = substr_replace($text, ' ', $i, 0);
+				$i++;
+				$last = $i;
+			}
+		}
+		return $text;
 	}
 
 }

@@ -649,14 +649,11 @@ class CoinService
             'poloniex' => true,
             'yobit'    => false,
         ];
+        $settings = Yii::$app->settings;
         foreach ($exchangeDefaults as $exchange => $disabled) {
-            if (function_exists('exchange_set_default')) {
-                exchange_set_default($exchange, 'disabled', $disabled);
-            }
+            $settings->exchangeSetDefault($exchange, 'disabled', $disabled);
         }
-        if (function_exists('settings_prefetch_all')) {
-            settings_prefetch_all();
-        }
+        $settings->prefetchAll();
 
         // Scan each active exchange for new coin listings
         $exchanges = \app\models\Balances::find()->all();
@@ -669,7 +666,7 @@ class CoinService
         $marketExchanges = $db->createCommand("SELECT DISTINCT name FROM markets")->queryColumn();
 
         foreach ($marketExchanges as $exchange) {
-            $isDisabled = function_exists('exchange_get') && exchange_get($exchange, 'disabled');
+            $isDisabled = (bool) Yii::$app->settings->exchangeGet($exchange, 'disabled', false);
 
             if ($isDisabled) {
                 $affected = (int) $db->createCommand(
@@ -685,7 +682,7 @@ class CoinService
                     ->all();
 
                 foreach ($coins as $coin) {
-                    if (function_exists('market_get') && market_get($exchange, $coin->getOfficialSymbol(), 'disabled', 1) == 0) {
+                    if (Yii::$app->settings->marketGet($exchange, $coin->getOfficialSymbol(), 'disabled', 1) == 0) {
                         $affected -= (int) $db->createCommand(
                             "UPDATE markets SET disabled=0 WHERE name=:ex AND coinid=:cid",
                             [':ex' => $exchange, ':cid' => $coin->id]

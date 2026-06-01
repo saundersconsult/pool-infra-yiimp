@@ -34,12 +34,9 @@ class MarketService
     {
         Yii::debug(__METHOD__, __CLASS__);
 
-        if (function_exists('market_set_default')) {
-            market_set_default('yobit', 'DCR', 'disabled', true);
-        }
-        if (function_exists('settings_prefetch_all')) {
-            settings_prefetch_all();
-        }
+        $settings = Yii::$app->settings;
+        $settings->marketSetDefault('yobit', 'DCR', 'disabled', true);
+        $settings->prefetchAll();
 
         // Update prices per active exchange
         $exchanges = Balances::find()->all();

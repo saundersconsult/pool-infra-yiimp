@@ -57,6 +57,9 @@ $config = [
             ],
         ],
         'db' => $db,
+        'settings' => [
+            'class' => \app\services\SettingsService::class,
+        ],
         'YiimpUtils' => [
             'class' => 'app\components\YiimpUtils',
         ],
