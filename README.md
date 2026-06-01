@@ -138,7 +138,8 @@ define('YIIMP_PRODUCTION',     true);
 // define('NICEHASH_ORG_ID',        'uuid-org');       // organisation UUID
 ```
 
-Full reference: `web/serverconfig.sample.php`.
+Full reference: `yiimp2/serverconfig.sample.php` (Yii2-only, no `YAAMP_` aliases).  
+The legacy `web/serverconfig.sample.php` also defines the backward-compatible `YAAMP_*` shims needed by the Yii1 layer.
 
 ### 3. `config/supervisord.conf`
 
@@ -214,15 +215,41 @@ supervisorctl -u yiimp -p supervisor -s http://127.0.0.1:8900 status
 ## Background jobs (yii2-queue)
 
 The legacy `main.sh` / `loop2.sh` / `blocks.sh` shell loops have been replaced by **yii2-queue delayed jobs**.  
-Three supervisor processes manage them:
+Each job reschedules itself automatically — no polling intervals to configure.
+
+### Option A — Supervisor (recommended for production)
+
+Three processes in `supervisord.conf` manage the workers:
 
 | Process | Workers | Purpose |
 |---------|---------|---------|
-| `yiimp-queue-seed` | 1 (run-once) | Pushes all 22 jobs into the queue on startup |
-| `yiimp-queue-blocks` | 1 (persistent) | Block pipeline — 1s poll, time-critical |
+| `yiimp-queue-seed` | 1 (run-once) | Pushes all 25 jobs into the queue on startup |
+| `yiimp-queue-blocks` | 1 (persistent) | Block pipeline — time-critical |
 | `yiimp-queue-general` | 2 (persistent) | All other jobs — coins, stats, payouts, markets |
 
-The admin **Jobs dashboard** at `/admin/jobs` shows live status for all 22 jobs and provides pause / resume / run-now controls.
+### Option B — Plain bash console
+
+If you are not using Docker/Supervisor, two scripts in `yiimp2/` provide the same functionality:
+
+```bash
+# Seed the queue and start 2 parallel workers (Ctrl-C to stop)
+cd yiimp2
+./start.sh
+
+# Or choose a different worker count
+./start.sh 4
+
+# Run a single persistent worker (for multiple terminal windows)
+./worker.sh
+
+# Drain the queue once and exit (useful for testing)
+./worker.sh once
+```
+
+`start.sh` seeds the queue on startup, starts N workers, and auto-restarts any worker that crashes.  
+`worker.sh` is a single-worker building block for multi-terminal or custom process manager setups.
+
+The admin **Jobs dashboard** at `/jobs` shows live status for all 25 jobs and provides pause / resume / run-now controls.
 
 ---
 
@@ -305,14 +332,18 @@ Notable migration files:
 ```
 stratum/        C++ stratum server source
 web/            Yii 1.1 pool application (production)
-yiimp2/         Yii 2.0 migration (admin, API, jobs)
-  commands/     Console commands (queue management, etc.)
+yiimp2/         Yii 2.0 application (admin, API, jobs — migration complete)
+  commands/     Console commands (CLI tools: coin, payout, user, graph, …)
   components/   RPC clients (Bitcoin, Ethereum, Monero), utilities
   controllers/  Web controllers
-  jobs/         yii2-queue job classes (22 jobs across 7 domains)
+  exchanges/    Exchange drivers (15 exchanges, native HTTP, no legacy globals)
+  jobs/         yii2-queue job classes (25 jobs across 7 domains)
   models/       ActiveRecord models
-  services/     Backend service classes (payments, coins, stats, …)
-  views/        Blade/PHP templates
+  services/     Backend service classes (payments, coins, stats, settings, …)
+  views/        PHP templates
+  start.sh      Start queue workers from a plain bash console
+  worker.sh     Single persistent queue worker (multi-terminal / custom PM)
+  serverconfig.sample.php  Yii2-only config reference (no YAAMP_ aliases)
 config/         Container config templates (supervisor, Apache, HAProxy)
 sql/            Database schema and incremental migration files
 bin/            CLI utilities (blocknotify, letsencrypt helpers)
