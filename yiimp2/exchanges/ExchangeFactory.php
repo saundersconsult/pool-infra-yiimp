@@ -4,9 +4,9 @@ namespace app\exchanges;
 
 use app\exchanges\drivers\{
     BiboxDriver, BinanceDriver, BitstampDriver, CexIoDriver,
-    ExbitronDriver, GateIoDriver, HitBtcDriver, KrakenDriver,
-    KuCoinDriver, NestexDriver, NonKycDriver, PoloniexDriver,
-    SafeTradeDriver, ShapeShiftDriver, YobitDriver
+    ExbitronDriver, GateIoDriver, HitBtcDriver, KlingexDriver,
+    KrakenDriver, KuCoinDriver, NestexDriver, NonKycDriver,
+    PoloniexDriver, SafeTradeDriver, ShapeShiftDriver, YobitDriver
 };
 
 /**
@@ -14,7 +14,8 @@ use app\exchanges\drivers\{
  *
  * Registry order matters: it controls the execution order when iterating
  * withBalance() (bitstamp → cexio → kraken → poloniex) and
- * withTrading() (binance → kucoin → yobit → nestex → nonkyc → exbitron).
+ * withTrading() (binance → kucoin → yobit → nestex → nonkyc → exbitron),
+ * withMarkets/withDiscover() includes klingex (markets + discover, USDT pairs).
  */
 class ExchangeFactory
 {
@@ -29,6 +30,7 @@ class ExchangeFactory
         'nestex'     => NestexDriver::class,
         'nonkyc'     => NonKycDriver::class,
         'exbitron'   => ExbitronDriver::class,
+        'klingex'    => KlingexDriver::class,
         'gateio'     => GateIoDriver::class,
         'hitbtc'     => HitBtcDriver::class,
         'safetrade'  => SafeTradeDriver::class,

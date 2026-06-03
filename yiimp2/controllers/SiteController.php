@@ -8,6 +8,7 @@ use yii\web\Controller;
 use yii\web\Response;
 use yii\filters\VerbFilter;
 
+use app\models\Algos;
 use app\models\Coins;
 
 class SiteController extends Controller
@@ -510,24 +511,23 @@ class SiteController extends Controller
 
 	////////////////////////////////////////////////////////////////////////////////////////
 
-    public function actionAlgo()
+    public function actionAlgo(): Response
 	{
-		$algo = Yii::$app->YiimpUtils->get_algo_param();
-        $a = (new \yii\db\Query())
-                ->select(['name'])
-                ->from('algos')
-                ->where(['name' => $algo])->scalar();
-
-        if($a)
-			Yii::$app->session->set('yaamp-algo', $a);
-		else
-			Yii::$app->session->set('yaamp-algo', 'all');
+		$algo  = Yii::$app->YiimpUtils->get_algo_param();
+		$valid = Algos::find()->select('name')->where(['name' => $algo])->scalar();
+		Yii::$app->session->set('yaamp-algo', $valid ?: 'all');
 
 		$route = Yii::$app->getRequest()->getQueryParam('r');
-		if (!empty($route))
-			return $this->redirect($route);
-		else
-			return $this->goback();
+		return !empty($route) ? $this->redirect($route) : $this->goBack();
+	}
+
+	public function actionGomining(): Response
+	{
+		$algo  = Yii::$app->YiimpUtils->get_algo_param();
+		$valid = Algos::find()->select('name')->where(['name' => $algo])->scalar();
+		Yii::$app->session->set('yaamp-algo', $valid ?: 'all');
+
+		return $this->redirect(['/site/mining']);
 	}
 
     protected function renderPartialAlgoMemcached($partial, $cachetime=15)

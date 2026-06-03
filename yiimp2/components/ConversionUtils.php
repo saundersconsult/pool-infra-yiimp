@@ -113,6 +113,13 @@ class ConversionUtils extends Component
 		return sprintf('%.5f', round($v, 5, PHP_ROUND_HALF_DOWN));
 	}
 
+	/** Format a coin amount as a BTC value, wrapping trailing zeros in a dim span. */
+	public function valuetocell(mixed $amount): string
+	{
+		$html = $amount ? $this->bitcoinvaluetoa($amount) : '-';
+		return preg_replace('/(0+)$/', '<span class="eov">$1</span>', $html);
+	}
+
 	public function altcoinvaluetoa($v)
 	{
 		return sprintf('%.6f', round($v, 6, PHP_ROUND_HALF_DOWN));

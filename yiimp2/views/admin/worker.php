@@ -1,6 +1,8 @@
 <?php
 
-/** @var yii\web\View $this */
+/** @var yii\web\View  $this        */
+/** @var string        $currentAlgo */
+/** @var string[]      $algos       */
 
 use yii\helpers\Html;
 
@@ -8,10 +10,6 @@ $this->title = 'Workers';
 
 echo Yii::$app->ViewUtils->getAdminSideBarLinks();
 
-$currentAlgo = Yii::$app->session->get('yaamp-algo', '');
-$algos       = Yii::$app->YiimpUtils->get_algos() ?? [];
-
-// Build options; ensure the current algo is always present in the list
 $options = '';
 if ($currentAlgo !== '' && !in_array($currentAlgo, $algos, true)) {
     $options .= '<option value="' . Html::encode($currentAlgo) . '" selected>'
@@ -35,9 +33,7 @@ $homeUrl = Yii::$app->homeUrl;
 <script>
 $(function() {
     main_refresh();
-    $('#algo_select').on('change', function() {
-        main_refresh();
-    });
+    $('#algo_select').on('change', function() { main_refresh(); });
 });
 
 var main_delay   = 30000;

@@ -217,60 +217,73 @@ echo '<td><b><a href="/site/block?id=' . $coin->id . '">' . $coin->name . '</a><
 echo '<td width="60"><b>' . $coin->symbol . '</b></td>';
 echo '<td><a href="/site/gomining?algo=' . $coin->algo . '">' . $coin->algo . '</a></td>';
 
-if (!$info || !isset($info['balance']) ) {
-    // echo '<td colspan="5">ERROR ' . $remote->error . '</td>';
+$rpcAvailable = $info && isset($info['balance']);
+
+if (!$rpcAvailable) {
+    // RPC unavailable — fill every column from DB-cached values so the table
+    // closes correctly and the page continues to render.
+    $dbBalance = (float) ($coin->balance ?? 0);
+    $dbIndex   = $coin->difficulty ? round($coin->reward * $coin->price / $coin->difficulty * 10000, 3) : '';
+    $rpcErrTip = Html::encode($remote->error ?: 'RPC not configured');
+    echo '<td>' . Yii::$app->ConversionUtils->round_difficulty($coin->difficulty) . '</td>';
+    echo '<td title="' . $rpcErrTip . '">—</td>';
+    echo '<td>' . Yii::$app->ConversionUtils->altcoinvaluetoa($dbBalance) . '</td>';
+    echo '<td>' . Yii::$app->ConversionUtils->bitcoinvaluetoa($dbBalance * $coin->price) . '</td>';
+    if ($PoS || $DCR) echo '<td>—</td>';
+    if ($DCR)         echo '<td>—</td>';
+    echo '<td title="' . $rpcErrTip . '">—</td>';
     echo '<td>' . Yii::$app->ConversionUtils->bitcoinvaluetoa($coin->price) . '</td>';
-    echo '<td colspan="2">';
-    echo "</tr></tbody></table><br/>";
-    return;
+    echo '<td>' . $coin->reward . '</td>';
+    echo '<td>' . $dbIndex . '</td>';
+    echo '</tr></tbody></table>';
+} else {
+    $errors      = isset($info['errors']) ? $info['errors'] : '';
+    $balance     = isset($info['balance']) ? $info['balance'] : '';
+    $txfee       = isset($info['paytxfee']) ? $info['paytxfee'] : '';
+    $connections = isset($info['connections']) ? Html::a($info['connections'], '/admin/coinpeers?id=' . $coin->id) : '';
+    $blocks      = isset($info['blocks']) ? $info['blocks'] : '';
+    $zbalance    = null;
+
+    if ((!is_null($coin->wallet_zaddress)) && (trim($coin->wallet_zaddress) != '')) {
+        $zbalance = $remote->z_getbalance(trim($coin->wallet_zaddress));
+    }
+
+    echo '<td>' . Yii::$app->ConversionUtils->round_difficulty($coin->difficulty) . '</td>';
+    if (!empty($errors))
+        echo '<td class="red" title="' . $errors . '">' . $blocks . '</td>';
+    else
+        echo "<td>$blocks</td>";
+
+    echo '<td>' . Yii::$app->ConversionUtils->altcoinvaluetoa($balance);
+
+    $btc = Yii::$app->ConversionUtils->bitcoinvaluetoa($balance * $coin->price);
+    if ($zbalance) {
+        echo '<br>('.Yii::$app->ConversionUtils->bitcoinvaluetoa($zbalance).')';
+    }
+    echo '</td>';
+
+    echo "<td>$btc</td>";
+    if ($PoS)
+        echo '<td>' . $stake . '</td>';
+    else if ($DCR) {
+        echo '<td>' . Html::a("$stake ($tickets)", '/admin/cointickets?id=' . $coin->id) . '</td>';
+        echo '<td>' . Html::a($ticketprice, "https://dcrstats.com/", array(
+            'target' => '_blank'
+        )) . '</td>';
+    }
+    echo "<td>$connections</td>";
+
+    echo '<td>' . Yii::$app->ConversionUtils->bitcoinvaluetoa($coin->price) . '</td>';
+    echo '<td>' . $coin->reward . '</td>';
+
+    $index = '';
+    if ($coin->difficulty)
+        $index = round($coin->reward * $coin->price / $coin->difficulty * 10000, 3);
+    echo '<td>' . $index . '</td>';
+
+    echo '</tr>';
+    echo '</tbody></table>';
 }
-
-$errors      = isset($info['errors']) ? $info['errors'] : '';
-$balance     = isset($info['balance']) ? $info['balance'] : '';
-$txfee       = isset($info['paytxfee']) ? $info['paytxfee'] : '';
-$connections = isset($info['connections']) ? Html::a($info['connections'], '/admin/coinpeers?id=' . $coin->id) : '';
-$blocks      = isset($info['blocks']) ? $info['blocks'] : '';
-$zbalance    = null;
-
-if ((!is_null($coin->wallet_zaddress)) && (trim($coin->wallet_zaddress) != '')) {
-    $zbalance = $remote->z_getbalance(trim($coin->wallet_zaddress));
-}
-
-echo '<td>' . Yii::$app->ConversionUtils->round_difficulty($coin->difficulty) . '</td>';
-if (!empty($errors))
-    echo '<td class="red" title="' . $errors . '">' . $blocks . '</td>';
-else
-    echo "<td>$blocks</td>";
-
-echo '<td>' . Yii::$app->ConversionUtils->altcoinvaluetoa($balance);
-
-$btc = Yii::$app->ConversionUtils->bitcoinvaluetoa($balance * $coin->price);
-if ($zbalance) {
-    echo '<br>('.Yii::$app->ConversionUtils->bitcoinvaluetoa($zbalance).')';
-}
-echo '</td>';
-
-echo "<td>$btc</td>";
-if ($PoS)
-    echo '<td>' . $stake . '</td>';
-else if ($DCR) {
-    echo '<td>' . Html::a("$stake ($tickets)", '/admin/cointickets?id=' . $coin->id) . '</td>';
-    echo '<td>' . Html::a($ticketprice, "https://dcrstats.com/", array(
-        'target' => '_blank'
-    )) . '</td>';
-}
-echo "<td>$connections</td>";
-
-echo '<td>' . Yii::$app->ConversionUtils->bitcoinvaluetoa($coin->price) . '</td>';
-echo '<td>' . $coin->reward . '</td>';
-
-$index = '';
-if ($coin->difficulty)
-    $index = round($coin->reward * $coin->price / $coin->difficulty * 10000, 3);
-echo '<td>' . $index . '</td>';
-
-echo '</tr>';
-echo '</tbody></table>';
 
 //////////////////////////////////////////////////////////////////////////////////////
 
@@ -307,25 +320,21 @@ else if ($ETH)
 else if ($coin->symbol == "BTC") $account = '*'; // should work for all coins now
 	
 	
-$txs = $remote->listtransactions($account, $maxrows);
-
-
-// Coins with disabled accounting will not show any tx. $account should be "*"
-
-if (empty($txs)) {
+if ($rpcAvailable) {
+    $txs = $remote->listtransactions($account, $maxrows);
+    // Coins with disabled accounting will not show any tx; retry with '*'.
+    if (empty($txs)) {
         $account = '*';
-        $txs = $remote->listtransactions($account, $maxrows);
-}
-	
-	
-$txs = $remote->listtransactions($account, $maxrows);
-
-if (empty($txs)) {
-    if (!empty($remote->error)) {
-        echo "<b>RPC Error: {$remote->error}</b><p/>";
+        $txs     = $remote->listtransactions($account, $maxrows);
     }
-    // retry...
-    $txs = $remote->listtransactions($account, 200);
+    if (empty($txs)) {
+        if (!empty($remote->error)) {
+            echo '<b>RPC Error: ' . Html::encode($remote->error) . '</b><p/>';
+        }
+        $txs = $remote->listtransactions($account, 200);
+    }
+} else {
+    $txs = [];
 }
 
 $txs_array = array();
@@ -351,7 +360,7 @@ if (!empty($txs)) {
 if ($DCR) {
 
     // normal value since 0.1.5
-    $amountin_mul = $info['version'] >= 10500 ? 1.0 : 0.00000001;
+    $amountin_mul = ($info['version'] ?? 0) >= 10500 ? 1.0 : 0.00000001;
 
     $prev_tx = array();
     $lastday = '';
@@ -412,7 +421,7 @@ if ($DCR) {
         if ($lastday == '' && count($txs) == $maxrows)
             $lastday = strftime('%F', $tx['time']);
     }
-    if ($info['version'] < 1010200)
+    if (($info['version'] ?? 0) < 1010200)
         ksort($txs_array); // was in reversed order
 }
 

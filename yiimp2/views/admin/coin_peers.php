@@ -1,23 +1,20 @@
 <?php
 
-/** @var yii\web\View $this */
-/** @var app\models\Coins $coin */
+/** @var yii\web\View      $this */
+/** @var app\models\Coins  $coin */
+/** @var array|false        $info */
+/** @var array[]            $list */
 
 use yii\helpers\Html;
-use app\components\rpc\WalletRPC;
 
 $this->title = 'Peers - ' . $coin->symbol;
 
-$remote = new WalletRPC($coin);
-$info   = $remote->getinfo();
+$localHeight   = $info['blocks'] ?? 0;
+$addnodeLines  = [];
+$latestVersion = '';
 
 echo Yii::$app->ViewUtils->getAdminSideBarLinks() . '<br/><br/>';
 echo Yii::$app->ViewUtils->getAdminWalletLinks($coin, $info, 'peers') . '<br/><br/>';
-
-$localHeight = $info['blocks'] ?? 0;
-$list        = $remote->getpeerinfo() ?: [];
-$addnodeLines = [];
-$latestVersion = '';
 
 ?>
 <style>
@@ -39,7 +36,6 @@ div.form { text-align: right; height: 30px; width: 350px; float: right;
 </div>
 
 <?php
-// Flash messages
 foreach (['error', 'success'] as $type) {
     if (Yii::$app->session->hasFlash($type)) {
         $cls = $type === 'error' ? 'red' : '';
@@ -71,15 +67,15 @@ foreach (['error', 'success'] as $type) {
     $peerVer = trim($peer['subver'] ?? '', '/');
     $latestVersion = max($latestVersion, $peerVer);
 
-    $height = $peer['currentheight'] ?? ($peer['synced_blocks'] ?? 0);
+    $height      = $peer['currentheight'] ?? ($peer['synced_blocks'] ?? 0);
     $heightClass = (abs($height - $localHeight) > 5) ? 'red' : '';
 
-    $connTime      = $peer['conntime']      ?? time();
-    $startHeight   = $peer['startingheight'] ?? '';
-    $lastRecv      = $peer['lastrecv']      ?? time();
-    $lastSend      = $peer['lastsend']      ?? time();
-    $bytesRecv     = round(($peer['bytesrecv'] ?? 0) / 1024, 1);
-    $bytesSent     = round(($peer['bytessent'] ?? 0) / 1024, 1);
+    $connTime    = $peer['conntime']       ?? time();
+    $startHeight = $peer['startingheight'] ?? '';
+    $lastRecv    = $peer['lastrecv']       ?? time();
+    $lastSend    = $peer['lastsend']       ?? time();
+    $bytesRecv   = round(($peer['bytesrecv'] ?? 0) / 1024, 1);
+    $bytesSent   = round(($peer['bytessent'] ?? 0) / 1024, 1);
 
     $removeUrl = Yii::$app->urlManager->createUrl([
         'admin/coinpeerremove', 'id' => $coin->id, 'node' => $node,

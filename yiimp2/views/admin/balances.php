@@ -1,7 +1,7 @@
 <?php
-/** @var yii\web\View $this */
 
-$exch = Yii::$app->request->get('exch', '');
+/** @var yii\web\View  $this */
+/** @var string        $exch */
 
 $this->title = 'Balances' . ($exch ? " - {$exch}" : '');
 

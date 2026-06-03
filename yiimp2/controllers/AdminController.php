@@ -10,12 +10,17 @@ use yii\filters\VerbFilter;
 use app\models\LoginForm;
 
 use app\components\rpc\WalletRPC;
+use app\models\Accounts;
+use app\models\Blocks;
 use app\models\Coins;
+use app\models\Connections;
+use app\models\Earnings;
 use app\models\Markets;
 use app\models\Mining;
 use app\models\Algos;
 use app\models\Bookmarks;
 use app\models\Orders;
+use app\models\Workers;
 use app\services\CoinService;
 use app\services\BlockService;
 use yii\helpers\ArrayHelper;
@@ -161,7 +166,14 @@ class AdminController extends Controller
     public function actionVersion(): string
     {
         $this->requireAdmin();
-        return $this->render('version');
+        $util        = Yii::$app->YiimpUtils;
+        $currentAlgo = Yii::$app->session->get('yaamp-algo', '');
+        $algos       = $util->get_algos() ?? [];
+
+        return $this->render('version', [
+            'currentAlgo' => $currentAlgo,
+            'algos'       => $algos,
+        ]);
     }
 
     public function actionVersion_results(): string
@@ -170,8 +182,40 @@ class AdminController extends Controller
         $algo = Yii::$app->request->get('algo', '');
         if ($algo !== '') {
             Yii::$app->session->set('yaamp-algo', $algo);
+        } else {
+            $algo = Yii::$app->session->get('yaamp-algo', '');
         }
-        return $this->renderPartial('version_results');
+
+        if ($algo === '') {
+            return $this->renderPartial('version_results', ['algo' => '', 'rows' => []]);
+        }
+
+        $util     = Yii::$app->YiimpUtils;
+        $target   = $util->hashrate_constant($algo);
+        $interval = $util->hashrate_step();
+        $delay    = time() - $interval;
+
+        // Single query: worker count + valid/invalid hashrate per version
+        $rows = Yii::$app->db->createCommand(
+            "SELECT
+                 w.version,
+                 COUNT(DISTINCT w.id)                                                              AS workers,
+                 COALESCE(SUM(CASE WHEN s.valid  = 1 THEN s.difficulty ELSE 0 END), 0)
+                     * :target / :interval / 1000                                                 AS hashrate,
+                 COALESCE(SUM(CASE WHEN s.valid != 1 THEN s.difficulty ELSE 0 END), 0)
+                     * :target / :interval / 1000                                                 AS invalid
+             FROM workers w
+             LEFT JOIN shares s ON s.workerid = w.id AND s.time > :delay
+             WHERE w.algo = :algo
+             GROUP BY w.version
+             ORDER BY workers DESC",
+            [':target' => $target, ':interval' => $interval, ':delay' => $delay, ':algo' => $algo]
+        )->queryAll();
+
+        return $this->renderPartial('version_results', [
+            'algo' => $algo,
+            'rows' => $rows,
+        ]);
     }
 
     /////////////////////////////////////////////////
@@ -180,7 +224,14 @@ class AdminController extends Controller
     public function actionWorker(): string
     {
         $this->requireAdmin();
-        return $this->render('worker');
+        $util        = Yii::$app->YiimpUtils;
+        $currentAlgo = Yii::$app->session->get('yaamp-algo', '');
+        $algos       = $util->get_algos() ?? [];
+
+        return $this->render('worker', [
+            'currentAlgo' => $currentAlgo,
+            'algos'       => $algos,
+        ]);
     }
 
     public function actionWorker_results(): string
@@ -189,8 +240,116 @@ class AdminController extends Controller
         $algo = Yii::$app->request->get('algo', '');
         if ($algo !== '') {
             Yii::$app->session->set('yaamp-algo', $algo);
+        } else {
+            $algo = Yii::$app->session->get('yaamp-algo', '');
         }
-        return $this->renderPartial('worker_results');
+
+        if ($algo === '') {
+            return $this->renderPartial('worker_results', [
+                'algo' => '', 'workers' => [], 'accounts' => [], 'coins' => [],
+                'shareStatsMap' => [], 'shareCountMap' => [],
+                'workerBlockMap' => [], 'userBlockMap' => [], 'totalRate' => 0.0,
+            ]);
+        }
+
+        $util     = Yii::$app->YiimpUtils;
+        $db       = Yii::$app->db;
+        $target   = $util->hashrate_constant($algo);
+        $interval = $util->hashrate_step();
+        $delay    = time() - $interval;
+
+        // ── Workers ───────────────────────────────────────────────────────────
+        $workers = Workers::find()->where(['algo' => $algo])->orderBy('name')->all();
+        $workerIds = array_map(fn($w) => $w->id, $workers);
+        $userIds   = array_values(array_unique(array_filter(array_map(fn($w) => $w->userid, $workers))));
+
+        // ── Batch: accounts + coins ───────────────────────────────────────────
+        $accounts = $userIds
+            ? Accounts::find()->where(['id' => $userIds])->indexBy('id')->all()
+            : [];
+
+        $coinIds = array_values(array_unique(array_filter(array_map(fn($a) => $a->coinid, $accounts))));
+        $coins   = $coinIds
+            ? Coins::find()->where(['id' => $coinIds])->indexBy('id')->all()
+            : [];
+
+        // ── Batch: share stats (rate + bad-rate) — time-windowed ─────────────
+        // Combines the two per-worker queries from worker_rate / worker_rate_bad
+        // into a single scan of the shares table.
+        $shareStatsMap = [];
+        if ($workerIds) {
+            $inList = implode(',', array_map('intval', $workerIds));
+            foreach ($db->createCommand(
+                "SELECT workerid,
+                        SUM(CASE WHEN valid=1 THEN difficulty ELSE 0 END)
+                            * :target / :interval / 1000                       AS rate,
+                        AVG(CASE WHEN valid=1 THEN difficulty ELSE NULL END)   AS avg_valid_diff,
+                        SUM(CASE WHEN valid!=1 THEN 1 ELSE 0 END)              AS bad_count
+                 FROM shares
+                 WHERE time > :delay AND workerid IN ($inList)
+                 GROUP BY workerid",
+                [':target' => $target, ':interval' => $interval, ':delay' => $delay]
+            )->queryAll() as $r) {
+                $rate    = (float) $r['rate'];
+                $avgDiff = (float) $r['avg_valid_diff'];
+                $bad     = (int)   $r['bad_count'];
+                $shareStatsMap[(int) $r['workerid']] = [
+                    'rate' => $rate,
+                    'bad'  => $avgDiff > 0 ? $bad * $avgDiff * $target / $interval / 1000 : 0.0,
+                ];
+            }
+        }
+        $totalRate = array_sum(array_column($shareStatsMap, 'rate'));
+
+        // ── Batch: all-time share count per worker ────────────────────────────
+        $shareCountMap = [];
+        if ($workerIds) {
+            foreach ((new \yii\db\Query)->select(['workerid', 'COUNT(id) AS cnt'])
+                ->from('shares')->where(['workerid' => $workerIds, 'algo' => $algo])
+                ->groupBy('workerid')->all() as $r
+            ) {
+                $shareCountMap[(int) $r['workerid']] = (int) $r['cnt'];
+            }
+        }
+
+        // ── Batch: block counts ───────────────────────────────────────────────
+        $workerBlockMap = [];
+        if ($workerIds) {
+            foreach ((new \yii\db\Query)->select(['workerid', 'COUNT(id) AS cnt'])
+                ->from('blocks')->where(['workerid' => $workerIds, 'algo' => $algo])
+                ->groupBy('workerid')->all() as $r
+            ) {
+                $workerBlockMap[(int) $r['workerid']] = (int) $r['cnt'];
+            }
+        }
+
+        $userBlockMap = [];
+        if ($userIds) {
+            $minTime = (int) $db->createCommand(
+                "SELECT MIN(time) FROM workers WHERE algo = :algo", [':algo' => $algo]
+            )->queryScalar();
+
+            foreach ((new \yii\db\Query)->select(['userid', 'COUNT(id) AS cnt'])
+                ->from('blocks')
+                ->where(['userid' => $userIds, 'algo' => $algo])
+                ->andWhere(['>', 'time', $minTime])
+                ->groupBy('userid')->all() as $r
+            ) {
+                $userBlockMap[(int) $r['userid']] = (int) $r['cnt'];
+            }
+        }
+
+        return $this->renderPartial('worker_results', [
+            'algo'           => $algo,
+            'workers'        => $workers,
+            'accounts'       => $accounts,
+            'coins'          => $coins,
+            'shareStatsMap'  => $shareStatsMap,
+            'shareCountMap'  => $shareCountMap,
+            'workerBlockMap' => $workerBlockMap,
+            'userBlockMap'   => $userBlockMap,
+            'totalRate'      => $totalRate,
+        ]);
     }
 
     /////////////////////////////////////////////////
@@ -199,13 +358,133 @@ class AdminController extends Controller
     public function actionUser(): string
     {
         $this->requireAdmin();
-        return $this->render('user');
+        $symbol = Yii::$app->request->get('symbol', 'all');
+
+        $activeCoins = Coins::find()
+            ->where(['enable' => 1])
+            ->andWhere(['or',
+                ['in', 'id', (new \yii\db\Query)->select('coinid')->from('accounts')->where(['>', 'balance', 0.0001])->distinct()],
+                ['in', 'id', (new \yii\db\Query)->select('coinid')->from('earnings')->distinct()],
+            ])
+            ->orderBy('symbol')
+            ->all();
+
+        return $this->render('user', [
+            'symbol'      => $symbol,
+            'activeCoins' => $activeCoins,
+        ]);
     }
 
     public function actionUser_results(): string
     {
         $this->requireAdmin();
-        return $this->renderPartial('user_results');
+        $symbol = Yii::$app->request->get('symbol', 'all');
+        $util   = Yii::$app->YiimpUtils;
+
+        // ── Resolve coin and user list ────────────────────────────────────────
+        $coin = null;
+        if ($symbol === 'all') {
+            $users = Accounts::find()
+                ->where(['>', 'balance', 0.001])
+                ->orWhere(['in', 'id',
+                    (new \yii\db\Query)->select('userid')->from('workers')->distinct(),
+                ])
+                ->orderBy(['balance' => SORT_DESC])
+                ->all();
+        } else {
+            $coin = Coins::find()->where(['symbol' => $symbol])->one();
+            if (!$coin) {
+                return $this->renderPartial('user_results', [
+                    'symbol' => $symbol, 'users' => [], 'coin' => null,
+                    'coins' => [], 'rateMap' => [], 'badRateMap' => [],
+                    'minerCountMap' => [], 'blockDataMap' => [], 'paidMap' => [],
+                ]);
+            }
+            $users = Accounts::find()
+                ->where(['coinid' => $coin->id])
+                ->andWhere(['or',
+                    ['>', 'balance', 0.001],
+                    ['in', 'id', (new \yii\db\Query)->select('userid')->from('workers')->distinct()],
+                ])
+                ->orderBy(['balance' => SORT_DESC])
+                ->all();
+        }
+
+        $userIds = array_map(fn($u) => $u->id, $users);
+
+        // ── Batch-load coins ──────────────────────────────────────────────────
+        $coinIds = array_values(array_unique(array_filter(array_map(fn($u) => $u->coinid, $users))));
+        $coins   = $coinIds ? Coins::find()->where(['id' => $coinIds])->indexBy('id')->all() : [];
+
+        // ── Batch aggregate queries ───────────────────────────────────────────
+        $rateMap       = [];
+        $badRateMap    = [];
+        $minerCountMap = [];
+        $blockDataMap  = [];
+        $paidMap       = [];
+
+        if ($userIds) {
+            $db       = Yii::$app->db;
+            $target   = $util->hashrate_constant();
+            $interval = $util->hashrate_step();
+            $delay    = time() - $interval;
+            $inList   = implode(',', array_map('intval', $userIds));
+
+            // Hashrate per user
+            foreach ($db->createCommand(
+                "SELECT userid, SUM(difficulty) * :target / :interval / 1000 AS rate
+                 FROM shares WHERE valid=1 AND time > :delay AND userid IN ($inList)
+                 GROUP BY userid",
+                [':target' => $target, ':interval' => $interval, ':delay' => $delay]
+            )->queryAll() as $r) {
+                $rateMap[(int) $r['userid']] = (float) $r['rate'];
+            }
+
+            // Worker count per user
+            foreach ((new \yii\db\Query)->select(['userid', 'COUNT(*) AS cnt'])
+                ->from('workers')->where(['userid' => $userIds])->groupBy('userid')->all()
+                as $r
+            ) {
+                $minerCountMap[(int) $r['userid']] = (int) $r['cnt'];
+            }
+
+            // Block count + difficulty sum per user (combined single query)
+            foreach ((new \yii\db\Query)
+                ->select(['userid', 'COUNT(*) AS cnt', 'SUM(difficulty) AS diff_sum'])
+                ->from('blocks')->where(['userid' => $userIds])->groupBy('userid')->all()
+                as $r
+            ) {
+                $blockDataMap[(int) $r['userid']] = [
+                    'cnt'      => (int)   $r['cnt'],
+                    'diff_sum' => (float) $r['diff_sum'],
+                ];
+            }
+
+            // Paid per user
+            foreach ((new \yii\db\Query)->select(['account_id', 'SUM(amount) AS paid'])
+                ->from('payouts')->where(['account_id' => $userIds])->groupBy('account_id')->all()
+                as $r
+            ) {
+                $paidMap[(int) $r['account_id']] = (float) $r['paid'];
+            }
+
+            // Bad-rate per user (cached in YiimpUtils; no raw DB hit on warm cache)
+            foreach ($userIds as $uid) {
+                $badRateMap[$uid] = (float) $util->user_rate_bad($uid);
+            }
+        }
+
+        return $this->renderPartial('user_results', [
+            'symbol'        => $symbol,
+            'users'         => $users,
+            'coin'          => $coin,
+            'coins'         => $coins,
+            'rateMap'       => $rateMap,
+            'badRateMap'    => $badRateMap,
+            'minerCountMap' => $minerCountMap,
+            'blockDataMap'  => $blockDataMap,
+            'paidMap'       => $paidMap,
+        ]);
     }
 
     /////////////////////////////////////////////////
@@ -287,7 +566,14 @@ class AdminController extends Controller
 
 	public function actionCoinwallets()
 	{
-		return $this->render('coinwallets');
+		$serverList = Coins::find()
+			->select('rpchost')
+			->distinct()
+			->where(['installed' => 1])
+			->orderBy('rpchost')
+			->column();
+
+		return $this->render('coinwallets', ['serverList' => $serverList]);
 	}
 
 	public function actionCoinwallet_results()
@@ -377,14 +663,46 @@ class AdminController extends Controller
 
     /////////////////////////////////////////////////
 
-	public function actionEarning()
+	public function actionEarning(): string
 	{
-		return $this->render('earning');
+		$coinId = (int) Yii::$app->request->get('id');
+		$coin   = $coinId ? Coins::findOne($coinId) : null;
+		return $this->render('earning', ['coinId' => $coinId, 'coin' => $coin]);
 	}
 
-	public function actionEarning_results()
+	public function actionEarning_results(): string
 	{
-		return $this->renderPartial('earning_results');
+		$coinId = (int) Yii::$app->request->get('id');
+
+		$query = Earnings::find()
+			->where(['!=', 'status', 2])
+			->orderBy('create_time DESC')
+			->limit(1500);
+		if ($coinId) {
+			$query->andWhere(['coinid' => $coinId]);
+		}
+		$earnings = $query->all();
+
+		$coinIds  = array_values(array_unique(array_filter(array_column($earnings, 'coinid'),  fn($v) => $v !== null)));
+		$userIds  = array_values(array_unique(array_filter(array_column($earnings, 'userid'),  fn($v) => $v !== null)));
+		$blockIds = array_values(array_unique(array_filter(array_column($earnings, 'blockid'), fn($v) => $v !== null)));
+
+		$coins    = $coinIds  ? Coins::find()->where(['id' => $coinIds])->indexBy('id')->all()    : [];
+		$accounts = $userIds  ? Accounts::find()->where(['id' => $userIds])->indexBy('id')->all() : [];
+		$blocks   = $blockIds ? Blocks::find()->where(['id' => $blockIds])->indexBy('id')->all()  : [];
+
+		$coin    = $coinId ? ($coins[$coinId] ?? null) : null;
+		$cleared = $coinId ? (float) Accounts::find()->where(['coinid' => $coinId])->sum('balance') : 0.0;
+
+		return $this->renderPartial('earning_results', [
+			'coinId'   => $coinId,
+			'earnings' => $earnings,
+			'coins'    => $coins,
+			'accounts' => $accounts,
+			'blocks'   => $blocks,
+			'coin'     => $coin,
+			'cleared'  => $cleared,
+		]);
 	}
 
 	// called from the wallet
@@ -394,7 +712,7 @@ class AdminController extends Controller
 		if ($coin) {
 			BackendClearEarnings($coin->id);
 		}
-		return $this->goback();
+		return $this->redirectBack();
 	}
 
     /////////////////////////////////////////////////
@@ -403,7 +721,127 @@ class AdminController extends Controller
     public function actionMonsters(): string
     {
         $this->requireAdmin();
-        return $this->render('monsters');
+
+        $db   = Yii::$app->db;
+        $t24h = time() - 86400;
+
+        // ── Five discovery queries → [userId, reason] pairs ──────────────────
+        $rows = [];
+
+        // 1. Workers whose PID is not in any active stratum (stale / ghost)
+        foreach ($db->createCommand(
+            "SELECT userid FROM shares
+             WHERE pid IS NULL OR pid NOT IN (SELECT pid FROM stratums)
+             GROUP BY userid"
+        )->queryAll() as $r) {
+            $rows[] = [(int) $r['userid'], 'pid'];
+        }
+
+        // 2. Accounts with balance but no blocks in the last 24 h
+        foreach ($db->createCommand(
+            "SELECT id FROM accounts
+             WHERE balance > 0.001
+               AND id NOT IN (
+                   SELECT DISTINCT userid FROM blocks
+                   WHERE userid IS NOT NULL AND time > :t
+               )",
+            [':t' => $t24h]
+        )->queryAll() as $r) {
+            $rows[] = [(int) $r['id'], 'blocks'];
+        }
+
+        // 3. Top 5 accounts by total worker count
+        foreach ($db->createCommand(
+            "SELECT userid, COUNT(*) AS total FROM workers
+             GROUP BY userid ORDER BY total DESC LIMIT 5"
+        )->queryAll() as $r) {
+            $rows[] = [(int) $r['userid'], 'miners'];
+        }
+
+        // 4. Top 5 accounts by share count (direct join avoids per-row worker lookup)
+        foreach ($db->createCommand(
+            "SELECT w.userid, COUNT(s.id) AS total
+             FROM shares s JOIN workers w ON w.id = s.workerid
+             GROUP BY w.userid ORDER BY total DESC LIMIT 5"
+        )->queryAll() as $r) {
+            $rows[] = [(int) $r['userid'], 'shares'];
+        }
+
+        // 5. All currently locked accounts
+        foreach (Accounts::find()->select('id')->where(['is_locked' => 1])->asArray()->all() as $r) {
+            $rows[] = [(int) $r['id'], 'locked'];
+        }
+
+        // ── Batch-load all referenced data ────────────────────────────────────
+        $userIds  = array_values(array_unique(array_column($rows, 0)));
+        $accounts = $userIds
+            ? Accounts::find()->where(['id' => $userIds])->indexBy('id')->all()
+            : [];
+
+        $coinIds = array_values(array_unique(array_filter(
+            array_map(fn($a) => $a->coinid, $accounts)
+        )));
+        $coins = $coinIds
+            ? Coins::find()->where(['id' => $coinIds])->indexBy('id')->all()
+            : [];
+
+        // Aggregate: total paid per user
+        $paidMap = [];
+        if ($userIds) {
+            foreach ((new \yii\db\Query)->select(['account_id', 'SUM(amount) AS paid'])
+                ->from('payouts')->where(['account_id' => $userIds])->groupBy('account_id')->all()
+                as $r
+            ) {
+                $paidMap[(int) $r['account_id']] = (float) $r['paid'];
+            }
+        }
+
+        // Aggregate: worker count per user
+        $workerCountMap = [];
+        if ($userIds) {
+            foreach ((new \yii\db\Query)->select(['userid', 'COUNT(*) AS cnt'])
+                ->from('workers')->where(['userid' => $userIds])->groupBy('userid')->all()
+                as $r
+            ) {
+                $workerCountMap[(int) $r['userid']] = (int) $r['cnt'];
+            }
+        }
+
+        // Aggregate: share count per user (via workers join)
+        $shareCountMap = [];
+        if ($userIds) {
+            $inList = implode(',', array_map('intval', $userIds));
+            foreach ($db->createCommand(
+                "SELECT w.userid, COUNT(s.id) AS cnt
+                 FROM shares s JOIN workers w ON w.id = s.workerid
+                 WHERE w.userid IN ($inList)
+                 GROUP BY w.userid"
+            )->queryAll() as $r) {
+                $shareCountMap[(int) $r['userid']] = (int) $r['cnt'];
+            }
+        }
+
+        // Aggregate: block count per user in the last 24 h
+        $blockCountMap = [];
+        if ($userIds) {
+            foreach ((new \yii\db\Query)->select(['userid', 'COUNT(*) AS cnt'])
+                ->from('blocks')->where(['userid' => $userIds])
+                ->andWhere(['>', 'time', $t24h])->groupBy('userid')->all()
+                as $r
+            ) {
+                $blockCountMap[(int) $r['userid']] = (int) $r['cnt'];
+            }
+        }
+
+        return $this->render('monsters', [
+            'rows'           => $rows,
+            'accounts'       => $accounts,
+            'coins'          => $coins,
+            'paidMap'        => $paidMap,
+            'workerCountMap' => $workerCountMap,
+            'shareCountMap'  => $shareCountMap,
+            'blockCountMap'  => $blockCountMap,
+        ]);
     }
 
     /////////////////////////////////////////////////
@@ -412,13 +850,73 @@ class AdminController extends Controller
     public function actionPayments(): string
     {
         $this->requireAdmin();
-        return $this->render('payments');
+        $coinId = (int) Yii::$app->request->get('id', 0);
+        $coin   = $coinId ? Coins::findOne($coinId) : null;
+        return $this->render('payments', ['coinId' => $coinId, 'coin' => $coin]);
     }
 
     public function actionPayments_results(): string
     {
         $this->requireAdmin();
-        return $this->renderPartial('payments_results');
+        $coinId = (int) Yii::$app->request->get('id', 0);
+
+        // Immature earnings per (coin, user) — one aggregate query
+        $immatureRows = Yii::$app->db->createCommand(
+            'SELECT coinid, userid, SUM(amount) AS immature FROM earnings WHERE status = 0'
+            . ($coinId ? ' AND coinid = :cid' : '')
+            . ' GROUP BY coinid, userid',
+            $coinId ? [':cid' => $coinId] : []
+        )->queryAll();
+        $immatureMap = [];
+        foreach ($immatureRows as $row) {
+            $immatureMap["{$row['coinid']}-{$row['userid']}"] = (float) $row['immature'];
+        }
+
+        // Failed payouts (no tx) per account — one aggregate query
+        $failedRows = Yii::$app->db->createCommand(
+            "SELECT account_id, SUM(amount) AS failed
+             FROM payouts WHERE (tx IS NULL OR tx = '') AND completed = 0
+             GROUP BY account_id"
+        )->queryAll();
+        $failedMap = [];
+        foreach ($failedRows as $row) {
+            $failedMap[(int) $row['account_id']] = (float) $row['failed'];
+        }
+
+        // Active user list
+        $query = Accounts::find()
+            ->where(['!=', 'is_locked', 1])
+            ->andWhere(['or',
+                ['>', 'balance', 0],
+                ['>', 'last_earning', time() - 3600],
+                ['in', 'id',
+                    (new \yii\db\Query)->select('account_id')->from('payouts')
+                        ->where(['or', ['tx' => null], ['tx' => '']])->distinct(),
+                ],
+            ])
+            ->orderBy(['last_earning' => SORT_DESC]);
+
+        if ($coinId) {
+            $query->andWhere(['coinid' => $coinId]);
+        } else {
+            $query->limit(100);
+        }
+        $list = $query->all();
+
+        // Batch-load all referenced coins in one query
+        $coinIds = array_values(array_unique(array_filter(array_map(fn($u) => $u->coinid, $list))));
+        $coins   = $coinIds ? Coins::find()->where(['id' => $coinIds])->indexBy('id')->all() : [];
+
+        $coin = $coinId ? ($coins[$coinId] ?? null) : null;
+
+        return $this->renderPartial('payments_results', [
+            'coinId'      => $coinId,
+            'list'        => $list,
+            'coins'       => $coins,
+            'coin'        => $coin,
+            'immatureMap' => $immatureMap,
+            'failedMap'   => $failedMap,
+        ]);
     }
 
     /** Restore a single user's failed payouts (no tx) to their balance. */
@@ -430,7 +928,7 @@ class AdminController extends Controller
         if ($user) {
             (new \app\services\PaymentService())->cancelFailedPayment($user->id);
         }
-        return $this->goBack();
+        return $this->redirectBack();
     }
 
     /** Restore all failed payouts within 48 h for a coin back to user balances. */
@@ -442,7 +940,7 @@ class AdminController extends Controller
 
         if (!$coin) {
             Yii::$app->session->setFlash('error', 'Invalid coin id!');
-            return $this->goBack();
+            return $this->redirectBack();
         }
 
         $since   = time() - 48 * 3600;
@@ -471,7 +969,7 @@ class AdminController extends Controller
             ? "Restored {$count} failed tx(s) to user balances: {$totalAmount} {$coin->symbol}"
             : 'No failed txs found';
         Yii::$app->session->setFlash('success', $msg);
-        return $this->goBack();
+        return $this->redirectBack();
     }
 
     /////////////////////////////////////////////////
@@ -479,22 +977,52 @@ class AdminController extends Controller
     public function actionBalances(): string
     {
         $this->requireAdmin();
-        return $this->render('balances');
+        $exch = Yii::$app->request->get('exch', '');
+        return $this->render('balances', ['exch' => $exch]);
     }
 
     public function actionBalances_results(): string
     {
         $this->requireAdmin();
-        $exch    = Yii::$app->request->get('exch', '');
-        $markets = \app\models\Markets::find()
-            ->where(['name' => $exch])
+        $exch   = Yii::$app->request->get('exch', '');
+        $mining = Mining::find()->one() ?? new Mining(['usdbtc' => 0]);
+        $usdbtc = (float) $mining->usdbtc;
+
+        // Match 'nonkyc' (BTC) and 'nonkyc USDT', 'nonkyc BTC', etc. (alt-base markets)
+        $markets = Markets::find()
+            ->where('name = :exch OR name LIKE :prefix', [
+                ':exch'   => $exch,
+                ':prefix' => $exch . ' %',
+            ])
             ->orderBy(new \yii\db\Expression('(balance + ontrade) * price DESC'))
             ->all();
-        $mining  = \app\models\Mining::find()->one() ?? new \app\models\Mining(['usdbtc' => 0]);
+
+        // Batch-load all referenced coins in one query
+        $coinIds = array_values(array_unique(array_filter(array_map(fn($m) => $m->coinid, $markets))));
+        $coins   = $coinIds ? Coins::find()->where(['id' => $coinIds])->indexBy('id')->all() : [];
+
+        // Precompute BTC-per-base-unit rates for all unique base currencies
+        $bases = array_values(array_unique(array_map(fn($m) => $m->base_coin ?: 'BTC', $markets)));
+        $otherBases = array_values(array_filter($bases, fn($b) => !in_array($b, ['BTC', 'USDT', 'USDC', 'USD'], true)));
+
+        $baseCoinPrices = $otherBases
+            ? Coins::find()->select(['symbol', 'price'])->where(['symbol' => $otherBases])->indexBy('symbol')->all()
+            : [];
+
+        $btcRateMap = ['BTC' => 1.0];
+        foreach (['USDT', 'USDC', 'USD'] as $stable) {
+            $btcRateMap[$stable] = $usdbtc > 0 ? 1.0 / $usdbtc : 0.0;
+        }
+        foreach ($otherBases as $base) {
+            $btcRateMap[$base] = isset($baseCoinPrices[$base]) ? (float) $baseCoinPrices[$base]->price : 0.0;
+        }
+
         return $this->renderPartial('balances_results', [
-            'exch'    => $exch,
-            'markets' => $markets,
-            'mining'  => $mining,
+            'exch'       => $exch,
+            'markets'    => $markets,
+            'mining'     => $mining,
+            'coins'      => $coins,
+            'btcRateMap' => $btcRateMap,
         ]);
     }
 
@@ -507,7 +1035,7 @@ class AdminController extends Controller
             \app\exchanges\ExchangeFactory::make($market->name)->updateMarkets();
             return $this->redirect(['/admin/balances', 'exch' => $market->name]);
         }
-        return $this->goBack();
+        return $this->redirectBack();
     }
 
     /////////////////////////////////////////////////
@@ -519,7 +1047,36 @@ class AdminController extends Controller
 
 	public function actionExchange_results()
 	{
-		return $this->renderPartial('exchange_results');
+		$minsent = time() - 2 * 3600;
+
+		$stuckMarkets = Markets::find()
+			->where('lastsent < :minsent AND lastsent > lasttraded', [':minsent' => $minsent])
+			->orderBy('lastsent')
+			->all();
+
+		$orders = Orders::find()->orderBy('(amount*bid) desc')->all();
+
+		$deposits = \app\models\Exchange_deposit::find()
+			->orderBy('send_time desc')
+			->limit(150)
+			->all();
+
+		// Collect all referenced coinids across all three sections, batch in one query
+		$coinIds = array_values(array_unique(array_filter(array_merge(
+			array_map(fn($m) => $m->coinid,  $stuckMarkets),
+			array_map(fn($o) => $o->coinid,  $orders),
+			array_map(fn($d) => $d->coinid,  $deposits),
+		))));
+		$coins = $coinIds
+			? Coins::find()->where(['id' => $coinIds])->indexBy('id')->all()
+			: [];
+
+		return $this->renderPartial('exchange_results', [
+			'stuckMarkets' => $stuckMarkets,
+			'orders'       => $orders,
+			'deposits'     => $deposits,
+			'coins'        => $coins,
+		]);
 	}
 
 	public function actionClearmarket()
@@ -530,7 +1087,7 @@ class AdminController extends Controller
 			$market->lastsent = null;
 			$market->save(false);
 		}
-		return $this->redirect(Yii::$app->request->referrer ?: ['/admin/exchange']);
+		return $this->redirectBack(['/admin/exchange']);
 	}
 
 	public function actionClearorder()
@@ -540,7 +1097,7 @@ class AdminController extends Controller
 		if ($order) {
 			$order->delete();
 		}
-		return $this->redirect(Yii::$app->request->referrer ?: ['/admin/exchange']);
+		return $this->redirectBack(['/admin/exchange']);
 	}
 
     /////////////////////////////////////////////////
@@ -558,21 +1115,36 @@ class AdminController extends Controller
 
 	public function actionConnections_results()
 	{
-		return $this->renderPartial('connections_results');
+		$list     = Connections::find()->orderBy('id desc')->all();
+		$lastTime = Connections::find()->max('last');
+
+		return $this->renderPartial('connections_results', [
+			'list'     => $list,
+			'lastTime' => $lastTime,
+		]);
 	}
 
 	/////////////////////////////////////////////////
 	/* coin peer management */
 
-	public function actionCoinpeers()
+	public function actionCoinpeers(): string|\yii\web\Response
 	{
 		$this->requireAdmin();
 		$id   = (int) Yii::$app->request->get('id');
 		$coin = Coins::findOne($id);
 		if (!$coin) {
-			return $this->goBack();
+			return $this->redirectBack();
 		}
-		return $this->render('coin_peers', ['coin' => $coin]);
+
+		$remote = new WalletRPC($coin);
+		$info   = $remote->error === null ? $remote->getinfo() : false;
+		$list   = ($remote->error === null) ? ($remote->getpeerinfo() ?: []) : [];
+
+		return $this->render('coin_peers', [
+			'coin'  => $coin,
+			'info'  => $info,
+			'list'  => $list,
+		]);
 	}
 
 	public function actionCoinpeerRemove()
@@ -597,14 +1169,14 @@ class AdminController extends Controller
 			}
 		}
 
-		return $this->redirect(Yii::$app->request->referrer ?: ['coinpeers', 'id' => $id]);
+		return $this->redirectBack(['coinpeers', 'id' => $id]);
 	}
 
 	public function actionCoinpeerAdd()
 	{
 		$this->requireAdmin();
 		if (!Yii::$app->request->isPost) {
-			return $this->goBack();
+			return $this->redirectBack();
 		}
 		$id   = (int) Yii::$app->request->get('id');
 		$node = trim(Yii::$app->request->post('node', ''));
@@ -636,7 +1208,34 @@ class AdminController extends Controller
 	public function actionBotnets(): string
 	{
 		$this->requireAdmin();
-		return $this->render('botnets');
+
+		$rows = Yii::$app->db->createCommand(
+			'SELECT userid, algo, pid,
+			        MAX(time)          AS time,
+			        COUNT(userid)      AS workers,
+			        COUNT(DISTINCT ip) AS ips,
+			        MAX(version)       AS version
+			 FROM workers
+			 GROUP BY userid, algo, pid
+			 HAVING ips > 10
+			 ORDER BY ips DESC'
+		)->queryAll();
+
+		$userIds  = array_values(array_unique(array_filter(array_column($rows, 'userid'))));
+		$accounts = $userIds
+			? Accounts::find()->where(['id' => $userIds])->indexBy('id')->all()
+			: [];
+
+		$coinIds = array_values(array_unique(array_filter(array_map(fn($a) => $a->coinid, $accounts))));
+		$coins   = $coinIds
+			? Coins::find()->where(['id' => $coinIds])->indexBy('id')->all()
+			: [];
+
+		return $this->render('botnets', [
+			'rows'     => $rows,
+			'accounts' => $accounts,
+			'coins'    => $coins,
+		]);
 	}
 
 	public function actionLoguser(): \yii\web\Response
@@ -649,7 +1248,7 @@ class AdminController extends Controller
 			$user->logtraffic = $en;
 			$user->save();
 		}
-		return $this->goBack();
+		return $this->redirectBack();
 	}
 
 	public function actionBlockuser(): \yii\web\Response
@@ -661,7 +1260,7 @@ class AdminController extends Controller
 			$user->is_locked = true;
 			$user->save();
 		}
-		return $this->goBack();
+		return $this->redirectBack();
 	}
 
 	public function actionUnblockuser(): \yii\web\Response
@@ -673,7 +1272,7 @@ class AdminController extends Controller
 			$user->is_locked = false;
 			$user->save();
 		}
-		return $this->goBack();
+		return $this->redirectBack();
 	}
 
 	public function actionBanuser(): \yii\web\Response
@@ -686,7 +1285,7 @@ class AdminController extends Controller
 			$user->balance   = 0;
 			$user->save();
 		}
-		return $this->goBack();
+		return $this->redirectBack();
 	}
 
 	/////////////////////////////////////////////////
@@ -696,7 +1295,7 @@ class AdminController extends Controller
 		$this->requireAdmin();
 		$coin = Coins::findOne((int) Yii::$app->request->get('id'));
 		if (!$coin) {
-			return $this->goBack();
+			return $this->redirectBack();
 		}
 
 		$bookmark          = new Bookmarks();
@@ -718,7 +1317,7 @@ class AdminController extends Controller
 		$bookmark = Bookmarks::findOne((int) Yii::$app->request->get('id'));
 		if (!$bookmark) {
 			Yii::$app->session->setFlash('error', 'invalid bookmark');
-			return $this->goBack();
+			return $this->redirectBack();
 		}
 
 		$coin = Coins::findOne($bookmark->idcoin);
@@ -740,7 +1339,7 @@ class AdminController extends Controller
 		if ($bookmark) {
 			$bookmark->delete();
 		}
-		return $this->goBack();
+		return $this->redirectBack();
 	}
 
 	public function actionBookmarkSend(): mixed
@@ -748,7 +1347,7 @@ class AdminController extends Controller
 		$this->requireAdmin();
 		$bookmark = Bookmarks::findOne((int) Yii::$app->request->get('id'));
 		if (!$bookmark) {
-			return $this->goBack();
+			return $this->redirectBack();
 		}
 
 		$coin   = Coins::findOne($bookmark->idcoin);
@@ -793,7 +1392,13 @@ class AdminController extends Controller
 		if ($id > 0) {
 			Yii::$app->db->createCommand('DELETE FROM benchmarks WHERE id = :id', [':id' => $id])->execute();
 		}
-		return $this->redirect(Yii::$app->request->referrer ?: ['/bench']);
+		return $this->redirectBack(['/bench']);
+	}
+
+	/** Redirect to the HTTP Referer, falling back to $fallback (default: home). */
+	private function redirectBack(array|string|null $fallback = null): \yii\web\Response
+	{
+		return $this->redirect(Yii::$app->request->referrer ?: ($fallback ?? Yii::$app->homeUrl));
 	}
 
 	/** Abort with 403 if the current user is not an admin. */

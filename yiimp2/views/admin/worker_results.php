@@ -1,33 +1,24 @@
 <?php
 
-/** @var yii\web\View $this */
+/** @var yii\web\View              $this           */
+/** @var string                    $algo           */
+/** @var app\models\Workers[]      $workers        */
+/** @var app\models\Accounts[]     $accounts       */
+/** @var app\models\Coins[]        $coins          */
+/** @var array<int,array>          $shareStatsMap  */
+/** @var array<int,int>            $shareCountMap  */
+/** @var array<int,int>            $workerBlockMap */
+/** @var array<int,int>            $userBlockMap   */
+/** @var float                     $totalRate      */
 
 use yii\helpers\Html;
-use app\models\Accounts;
-use app\models\Coins;
-use app\models\Workers;
 
-$algo = Yii::$app->session->get('yaamp-algo', '');
 if ($algo === '') {
     echo '<p class="text-muted">No algo selected.</p>';
     return;
 }
 
 $conv = Yii::$app->ConversionUtils;
-$util = Yii::$app->YiimpUtils;
-$db   = Yii::$app->db;
-
-$workers = Workers::find()
-    ->where(['algo' => $algo])
-    ->orderBy('name')
-    ->all();
-
-// Pre-compute total rate so we can show per-worker share percentages
-$totalRate = 0.0;
-foreach ($workers as $w) {
-    $totalRate += $util->worker_rate($w->id);
-}
-
 ?>
 <div align="right" style="margin-top:-20px; margin-bottom:6px;">
     <input class="search" type="search" data-column="all"
@@ -37,8 +28,7 @@ foreach ($workers as $w) {
 tr.ssrow.filtered { display: none; }
 </style>
 
-<?php
-Yii::$app->ViewUtils->showTableSorter('maintable', "{
+<?php Yii::$app->ViewUtils->showTableSorter('maintable', "{
     tableClass: 'dataGrid',
     textExtraction: {
         6: function(node, table, n) { return \$(node).attr('data'); }
@@ -52,8 +42,7 @@ Yii::$app->ViewUtils->showTableSorter('maintable', "{
         filter_childRows: true,
         filter_ignoreCase: true
     }
-}");
-?>
+}"); ?>
 
 <thead>
 <tr>
@@ -75,64 +64,38 @@ Yii::$app->ViewUtils->showTableSorter('maintable', "{
 </thead>
 <tbody>
 <?php foreach ($workers as $worker):
-    $workerRate  = $util->worker_rate($worker->id);
-    $workerBad   = $util->worker_rate_bad($worker->id);
+    $wid  = $worker->id;
+    $uid  = $worker->userid ?: null;
+
+    $stats      = $shareStatsMap[$wid]  ?? ['rate' => 0.0, 'bad' => 0.0];
+    $workerRate = $stats['rate'];
+    $workerBad  = $stats['bad'];
+    $shares     = $shareCountMap[$wid]  ?? 0;
+    $wBlocks    = $workerBlockMap[$wid] ?? 0;
+    $uBlocks    = $uid ? ($userBlockMap[$uid] ?? 0) : 0;
+
     $sharePercent = ($totalRate > 0) ? (100.0 * $workerRate) / $totalRate : 0.0;
-    $pctBad      = ($workerRate + $workerBad) > 0
+    $pctBad       = ($workerRate + $workerBad) > 0
         ? round($workerBad * 100 / ($workerRate + $workerBad), 3)
         : 0;
-    $rateDisplay = $workerRate ? $conv->Itoa2($workerRate) . 'H' : '-';
+    $rateDisplay  = $workerRate ? $conv->Itoa2($workerRate) . 'H' : '-';
 
-    // Resolve user + coin
-    $user     = null;
-    $coin     = null;
-    $coinImg  = '';
-    $coinLink = '';
-    $coinsym  = '';
-    $donationPct = null;
+    $user = $uid ? ($accounts[$uid] ?? null) : null;
+    $coin = $user ? ($coins[$user->coinid] ?? null) : null;
 
-    if ($worker->userid) {
-        $user = Accounts::findOne((int) $worker->userid);
-        if ($user) {
-            $coin = Coins::findOne((int) $user->coinid);
-            if ($coin) {
-                $coinsym  = $coin->symbol;
-                $coinImg  = Html::img(Html::encode($coin->image), ['width' => 16, 'alt' => Html::encode($coin->symbol)]);
-                $coinLink = Html::a(Html::encode($coin->name), ['/admin/coinwallet', 'id' => $coin->id]);
-            }
-            $donationPct = $user->donation ?: null;
-        }
-    }
+    $coinImg  = $coin ? Html::img(Html::encode($coin->image), ['width' => 16, 'alt' => Html::encode($coin->symbol)]) : '';
+    $coinLink = $coin ? Html::a(Html::encode($coin->name), ['/admin/coinwallet', 'id' => $coin->id]) : '';
+    $coinsym  = $coin ? $coin->symbol : '';
 
-    // Display name: prefer worker.worker, fall back to user login
     $displayName = $worker->worker ?? '';
     if ($displayName === '' && $user) {
         $displayName = $user->login ?? $user->username ?? '';
     }
 
-    // Truncate long DNS/IP to last 40 chars
     $dns = !empty($worker->dns) ? $worker->dns : $worker->ip;
     if (strlen((string) $dns) > 40) {
         $dns = '…' . substr($dns, strlen($dns) - 40);
     }
-
-    // Share and block counts for this worker
-    $shares = (int) $db->createCommand(
-        "SELECT COUNT(id) FROM shares WHERE workerid = :wid AND algo = :algo",
-        [':wid' => $worker->id, ':algo' => $algo]
-    )->queryScalar();
-
-    $workerBlocks = (int) $db->createCommand(
-        "SELECT COUNT(id) FROM blocks WHERE workerid = :wid AND algo = :algo",
-        [':wid' => $worker->id, ':algo' => $algo]
-    )->queryScalar();
-
-    $userBlocks = $worker->userid ? (int) $db->createCommand(
-        "SELECT COUNT(id) FROM blocks
-         WHERE userid = :uid AND algo = :algo
-           AND time > (SELECT MIN(time) FROM workers WHERE algo = :algo2)",
-        [':uid' => $worker->userid, ':algo' => $algo, ':algo2' => $algo]
-    )->queryScalar() : 0;
 ?>
 <tr class="ssrow">
     <td width="20"><?= $coinImg ?></td>
@@ -149,17 +112,13 @@ Yii::$app->ViewUtils->showTableSorter('maintable', "{
     <td><?= $shares ?></td>
     <td>
         <?php if ($workerBad > 0): ?>
-            <?php if ($pctBad > 50): ?>
-                <b><?= round($pctBad, 1) ?>%</b>
-            <?php else: ?>
-                <?= round($pctBad, 1) ?>%
-            <?php endif ?>
+            <?= $pctBad > 50 ? '<b>' . round($pctBad, 1) . '%</b>' : round($pctBad, 1) . '%' ?>
         <?php endif ?>
     </td>
     <td><?= number_format($sharePercent, 1, '.', '') ?>%</td>
-    <td><?= $workerBlocks ?> / <?= $userBlocks ?></td>
+    <td><?= $wBlocks ?> / <?= $uBlocks ?></td>
     <td><?= Html::encode($displayName) ?></td>
-    <td><?= $donationPct ? Html::encode($donationPct) . '&nbsp;%' : '' ?></td>
+    <td><?= $user && $user->donation ? Html::encode($user->donation) . '&nbsp;%' : '' ?></td>
 </tr>
 <?php endforeach ?>
 </tbody>

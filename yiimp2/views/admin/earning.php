@@ -1,21 +1,21 @@
 <?php
 
-use app\models\Coins;
+/** @var yii\web\View          $this   */
+/** @var int                   $coinId */
+/** @var app\models\Coins|null $coin   */
+
+if ($coin) {
+	$this->title = 'Earnings - ' . $coin->symbol;
+}
 
 echo Yii::$app->ViewUtils->getAdminSideBarLinks();
-
-$coin_id = (int) Yii::$app->getRequest()->getQueryParam('id');
-if ($coin_id) {
-	$coin = Coins::findOne(['id' => $coin_id]);
-	$this->title = 'Earnings - '.$coin->symbol;
-}
 ?>
 
 <div id='main_results'></div>
 
 <script type="text/javascript">
 
-var main_delay=60000;
+var main_delay = 60000;
 var main_timeout;
 
 function main_ready(data)
@@ -26,12 +26,12 @@ function main_ready(data)
 
 function main_error()
 {
-	main_timeout = setTimeout(main_refresh, main_delay*2);
+	main_timeout = setTimeout(main_refresh, main_delay * 2);
 }
 
 function main_refresh()
 {
-	var url = '/admin/earning_results?id=<?= $coin_id ?>';
+	var url = '/admin/earning_results?id=<?= $coinId ?>';
 	var minh = $(window).height() - 150;
 	$('#main_results').css({'min-height': minh + 'px'});
 
@@ -41,6 +41,4 @@ function main_refresh()
 
 </script>
 
-<?php
-
-Yii::$app->view->registerJs("main_refresh();");
+<?php Yii::$app->view->registerJs('main_refresh();'); ?>

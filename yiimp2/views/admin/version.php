@@ -1,6 +1,8 @@
 <?php
 
-/** @var yii\web\View $this */
+/** @var yii\web\View  $this        */
+/** @var string        $currentAlgo */
+/** @var string[]      $algos       */
 
 use yii\helpers\Html;
 
@@ -8,16 +10,12 @@ $this->title = 'Versions';
 
 echo Yii::$app->ViewUtils->getAdminSideBarLinks();
 
-$currentAlgo = Yii::$app->session->get('yaamp-algo', '');
-$algos       = Yii::$app->YiimpUtils->get_algos() ?? [];
-
 $options = '';
 foreach ($algos as $a) {
     $sel      = ($a === $currentAlgo) ? ' selected' : '';
     $options .= '<option value="' . Html::encode($a) . '"' . $sel . '>'
               . Html::encode($a) . '</option>';
 }
-// Ensure the current algo is always in the list even if not in the standard list
 if ($currentAlgo !== '' && !in_array($currentAlgo, $algos, true)) {
     $options = '<option value="' . Html::encode($currentAlgo) . '" selected>'
              . Html::encode($currentAlgo) . '</option>' . $options;

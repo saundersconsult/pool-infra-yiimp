@@ -1,28 +1,15 @@
 <?php
 
-/** @var yii\web\View $this */
+/** @var yii\web\View              $this     */
+/** @var array[]                   $rows     */
+/** @var app\models\Accounts[]     $accounts */
+/** @var app\models\Coins[]        $coins    */
 
 use yii\helpers\Html;
-use app\models\Accounts;
-use app\models\Coins;
 
 $this->title = 'Botnets';
 
 echo Yii::$app->ViewUtils->getAdminSideBarLinks() . '<br/><br/>';
-
-// Accounts with more than 10 distinct IPs across any (userid, algo, pid) group.
-// These are likely clients connecting from botnets or VPN farms.
-$botnets = Yii::$app->db->createCommand(
-    "SELECT userid, algo, pid,
-            MAX(time)         AS time,
-            COUNT(userid)     AS workers,
-            COUNT(DISTINCT ip) AS ips,
-            MAX(version)      AS version
-     FROM workers
-     GROUP BY userid, algo, pid
-     HAVING ips > 10
-     ORDER BY ips DESC"
-)->queryAll();
 
 ?>
 <style>
@@ -58,21 +45,18 @@ Yii::$app->ViewUtils->showTableSorter('maintable', "{
 </tr>
 </thead>
 <tbody>
+<?php foreach ($rows as $botnet): ?>
 <?php
-if (!empty($botnets)):
-    foreach ($botnets as $botnet):
-        if (!$botnet['userid']) continue;
+    if (!$botnet['userid']) continue;
+    $user = $accounts[$botnet['userid']] ?? null;
+    if (!$user) continue;
+    $coin = $coins[$user->coinid] ?? null;
+    if (!$coin) continue;
 
-        $user = Accounts::findOne((int) $botnet['userid']);
-        if (!$user) continue;
-
-        $coin = Coins::findOne((int) $user->coinid);
-        if (!$coin) continue;
-
-        $coinImg  = Html::img(Html::encode($coin->image), ['width' => 16, 'alt' => Html::encode($coin->symbol)]);
-        $coinLink = Html::a(Html::encode($coin->name), ['/admin/coinwallet', 'id' => $coin->id]);
-        $addrLink = Html::a(Html::encode($user->username), ['/?address=' . urlencode($user->username)]);
-        $d        = Yii::$app->ConversionUtils->datetoa2($botnet['time']);
+    $coinImg  = Html::img(Html::encode($coin->image), ['width' => 16, 'alt' => Html::encode($coin->symbol)]);
+    $coinLink = Html::a(Html::encode($coin->name), ['/admin/coinwallet', 'id' => $coin->id]);
+    $addrLink = Html::a(Html::encode($user->username), ['/?address=' . urlencode($user->username)]);
+    $d        = Yii::$app->ConversionUtils->datetoa2($botnet['time']);
 ?>
 <tr class="ssrow">
     <td><?= $coinImg ?></td>
@@ -85,21 +69,18 @@ if (!empty($botnets)):
     <td><?= (int) $botnet['workers'] ?></td>
     <td><?= Html::encode(substr((string) $botnet['version'], 0, 30)) ?></td>
     <td class="actions" align="right">
-        <!-- watch / unwatch -->
         <?php if ($user->logtraffic): ?>
             <?= Html::a('unwatch', ['/admin/loguser', 'id' => $user->id, 'en' => 0]) ?>
         <?php else: ?>
-            <?= Html::a('watch', ['/admin/loguser', 'id' => $user->id, 'en' => 1]) ?>
+            <?= Html::a('watch',   ['/admin/loguser', 'id' => $user->id, 'en' => 1]) ?>
         <?php endif ?>
 
-        <!-- block / unblock -->
         <?php if ($user->is_locked): ?>
             <?= Html::a('unblock', ['/admin/unblockuser', 'wallet' => $user->username]) ?>
         <?php else: ?>
-            <?= Html::a('block', ['/admin/blockuser', 'wallet' => $user->username]) ?>
+            <?= Html::a('block',   ['/admin/blockuser',   'wallet' => $user->username]) ?>
         <?php endif ?>
 
-        <!-- ban (irreversible — balance zeroed + locked) -->
         <?= Html::a(
             '<span class="red">BAN</span>',
             ['/admin/banuser', 'id' => $user->id],
@@ -107,13 +88,10 @@ if (!empty($botnets)):
         ) ?>
     </td>
 </tr>
-<?php
-    endforeach;
-endif;
-?>
+<?php endforeach ?>
 </tbody>
 <tfoot>
-<?php if (empty($botnets)): ?>
+<?php if (empty($rows)): ?>
 <tr><th colspan="10">No botnets detected (threshold: &gt; 10 distinct IPs per worker group)</th></tr>
 <?php endif ?>
 </tfoot>

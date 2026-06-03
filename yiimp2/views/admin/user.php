@@ -1,30 +1,18 @@
 <?php
 
-/** @var yii\web\View $this */
+/** @var yii\web\View        $this        */
+/** @var string              $symbol      */
+/** @var app\models\Coins[]  $activeCoins */
 
 use yii\helpers\Html;
-use yii\db\Query;
-use app\models\Coins;
 
 $this->title = 'Users';
 
 echo Yii::$app->ViewUtils->getAdminSideBarLinks();
 
-$symbol = Yii::$app->request->get('symbol', 'all');
-
-// Coins that have active users with a balance or recent earnings
-$activeCoins = Coins::find()
-    ->where(['enable' => 1])
-    ->andWhere(['or',
-        ['in', 'id', (new Query)->select('coinid')->from('accounts')->where(['>', 'balance', 0.0001])->distinct()],
-        ['in', 'id', (new Query)->select('coinid')->from('earnings')->distinct()],
-    ])
-    ->orderBy('symbol')
-    ->all();
-
 $options = '<option value="all"' . ($symbol === 'all' ? ' selected' : '') . '>-all-</option>';
 foreach ($activeCoins as $coin) {
-    $sel     = $coin->symbol === $symbol ? ' selected' : '';
+    $sel      = $coin->symbol === $symbol ? ' selected' : '';
     $options .= '<option value="' . Html::encode($coin->symbol) . '"' . $sel . '>'
               . Html::encode($coin->symbol) . '</option>';
 }

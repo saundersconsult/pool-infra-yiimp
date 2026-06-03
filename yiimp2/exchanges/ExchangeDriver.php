@@ -142,20 +142,28 @@ abstract class ExchangeDriver
             $coin->save();
         }
 
+        // Non-BTC markets are named "exchange BASECOIN" (e.g. "nonkyc USDT").
+        // BTC markets keep the bare exchange name.
+        $marketName = ($baseCoin !== null) ? "{$exchange} {$baseCoin}" : $exchange;
+
         foreach (Coins::find()->where(['symbol' => $symbol])->orWhere(['symbol2' => $symbol])->all() as $c) {
-            $query = Markets::find()->where(['coinid' => $c->id, 'name' => $exchange]);
+            $query = Markets::find()->where(['coinid' => $c->id]);
             if (is_null($baseCoin)) {
-                $query->andWhere(['or', ['base_coin' => null], ['base_coin' => '']]);
+                $query->andWhere(['name' => $exchange])
+                      ->andWhere(['or', ['base_coin' => null], ['base_coin' => '']]);
             } else {
-                $query->andWhere(['base_coin' => $baseCoin]);
+                // Accept both the qualified name and the legacy bare name so that
+                // existing records are found and renamed rather than duplicated.
+                $query->andWhere(['base_coin' => $baseCoin])
+                      ->andWhere(['or', ['name' => $marketName], ['name' => $exchange]]);
             }
             $market = $query->one();
             if (!$market) {
                 $market            = new Markets();
                 $market->coinid    = $c->id;
-                $market->name      = $exchange;
                 $market->base_coin = $baseCoin;
             }
+            $market->name    = $marketName; // always write/upgrade to the qualified name
             $market->deleted = false;
             $market->save();
         }

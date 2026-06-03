@@ -1,6 +1,7 @@
 <?php
 
 /** @var yii\web\View $this */
+/** @var string[]     $serverList */
 
 echo Yii::$app->ViewUtils->getAdminSideBarLinks();
 
@@ -15,15 +16,8 @@ Select Server:
 <option value="">all</option>
 end;
 
-$serverlist =  (new \yii\db\Query())
-				->select('rpchost')
-				->DISTINCT(true)
-				->from('coins')
-				->where(['installed' => 1])
-				->orderBy('rpchost')
-				->all();
-foreach ($serverlist as $srv)   {
-	echo '<option value="'.$srv['rpchost'].'">'.$srv['rpchost'].'</option>';
+foreach ($serverList as $host) {
+	echo '<option value="' . \yii\helpers\Html::encode($host) . '">' . \yii\helpers\Html::encode($host) . '</option>';
 }
 
 echo <<<end

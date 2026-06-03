@@ -1,23 +1,14 @@
 <?php
 
-/** @var yii\web\View $this */
+/** @var yii\web\View          $this   */
+/** @var int                   $coinId */
+/** @var app\models\Coins|null $coin   */
 
 use yii\helpers\Html;
-use app\models\Coins;
 
-$coinId = (int) Yii::$app->request->get('id', 0);
-
-if ($coinId) {
-    $coin        = Coins::findOne($coinId);
-    $this->title = 'Payments' . ($coin ? ' — ' . $coin->symbol : '');
-} else {
-    $this->title = 'Payments';
-}
+$this->title = 'Payments' . ($coin ? ' — ' . $coin->symbol : '');
 
 echo Yii::$app->ViewUtils->getAdminSideBarLinks();
-
-$homeUrl = Yii::$app->homeUrl;
-$jsId    = (int) $coinId;
 ?>
 
 <div id="main_results"></div>
@@ -38,7 +29,7 @@ function main_error() {
 function main_refresh() {
     clearTimeout(main_timeout);
     $('#main_results').css('min-height', ($(window).height() - 150) + 'px');
-    $.get('<?= $homeUrl ?>admin/payments_results?id=<?= $jsId ?>', '', main_ready)
+    $.get('<?= Yii::$app->homeUrl ?>admin/payments_results?id=<?= $coinId ?>', '', main_ready)
      .fail(main_error);
 }
 

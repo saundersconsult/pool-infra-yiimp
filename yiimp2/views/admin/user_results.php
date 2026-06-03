@@ -1,48 +1,19 @@
 <?php
 
-/** @var yii\web\View $this */
+/** @var yii\web\View           $this          */
+/** @var string                 $symbol        */
+/** @var app\models\Accounts[]  $users         */
+/** @var app\models\Coins|null  $coin          */
+/** @var app\models\Coins[]     $coins         */
+/** @var array<int,float>       $rateMap       */
+/** @var array<int,float>       $badRateMap    */
+/** @var array<int,int>         $minerCountMap */
+/** @var array<int,array>       $blockDataMap  */
+/** @var array<int,float>       $paidMap       */
 
 use yii\helpers\Html;
-use yii\db\Query;
-use app\models\Accounts;
-use app\models\Coins;
-use app\models\Workers;
-use app\models\Blocks;
 
-$symbol = Yii::$app->request->get('symbol', 'all');
-$coin   = null;
-
-if ($symbol === 'all') {
-    $users = Accounts::find()
-        ->where(['>', 'balance', 0.001])
-        ->orWhere(['in', 'id',
-            (new Query)->select('userid')->from('workers')->distinct()
-        ])
-        ->orderBy(['balance' => SORT_DESC])
-        ->all();
-} else {
-    $coin = Coins::find()->where(['symbol' => $symbol])->one();
-    if (!$coin) {
-        return;
-    }
-    $users = Accounts::find()
-        ->where(['coinid' => $coin->id])
-        ->andWhere(['or',
-            ['>', 'balance', 0.001],
-            ['in', 'id', (new Query)->select('userid')->from('workers')->distinct()],
-        ])
-        ->orderBy(['balance' => SORT_DESC])
-        ->all();
-}
-
-$conv     = Yii::$app->ConversionUtils;
-$util     = Yii::$app->YiimpUtils;
-$db       = Yii::$app->db;
-
-$target   = $util->hashrate_constant();   // default target, algo-independent
-$interval = $util->hashrate_step();       // 300 s window
-$delay    = time() - $interval;
-
+$conv = Yii::$app->ConversionUtils;
 ?>
 <div align="right" style="margin-top:-20px; margin-bottom:6px;">
     <input class="search" type="search" data-column="all" style="width:140px;" placeholder="Search…">
@@ -53,8 +24,7 @@ tr.ssrow.filtered { display: none; }
 .actions a { margin-right: 4px; }
 </style>
 
-<?php
-Yii::$app->ViewUtils->showTableSorter('maintable', "{
+<?php Yii::$app->ViewUtils->showTableSorter('maintable', "{
     tableClass: 'dataGrid',
     textExtraction: {
         4: function(node, table, cellIndex) { return \$(node).attr('data'); },
@@ -69,8 +39,7 @@ Yii::$app->ViewUtils->showTableSorter('maintable', "{
         filter_childRows: true,
         filter_ignoreCase: true
     }
-}");
-?>
+}"); ?>
 
 <thead>
 <tr>
@@ -95,53 +64,33 @@ $totalBalance = 0.0;
 $totalPaid    = 0.0;
 
 foreach ($users as $user):
-    // Hashrate across all algos in the last $interval seconds
-    $userRate = (float) $db->createCommand(
-        "SELECT SUM(difficulty) * :target / :interval / 1000
-         FROM shares WHERE valid=1 AND time > :delay AND userid = :uid",
-        [':target' => $target, ':interval' => $interval, ':delay' => $delay, ':uid' => $user->id]
-    )->queryScalar();
+    $uid        = $user->id;
+    $userRate   = $rateMap[$uid]        ?? 0.0;
+    $userBad    = $badRateMap[$uid]     ?? 0.0;
+    $minerCount = $minerCountMap[$uid]  ?? 0;
+    $blockData  = $blockDataMap[$uid]   ?? ['cnt' => 0, 'diff_sum' => 0.0];
+    $paid       = $paidMap[$uid]        ?? 0.0;
 
-    $userBad = (float) $util->user_rate_bad($user->id);
-    $pctBad  = $userRate ? round($userBad * 100 / $userRate, 3) : 0;
-
-    $minerCount = (int) Workers::find()->where(['userid' => $user->id])->count();
-    $blockCount = (int) Blocks::find()->where(['userid'  => $user->id])->count();
-
-    $paid = (float) $db->createCommand(
-        "SELECT SUM(amount) FROM payouts WHERE account_id = :uid",
-        [':uid' => $user->id]
-    )->queryScalar();
-
-    $blockDiff = ($paid > 0 && $blockCount > 0)
-        ? round((float) $db->createCommand(
-            "SELECT SUM(difficulty) FROM blocks WHERE userid = :uid",
-            [':uid' => $user->id]
-          )->queryScalar() / $paid, 3)
+    $blockCount = $blockData['cnt'];
+    $blockDiff  = ($paid > 0 && $blockCount > 0)
+        ? round($blockData['diff_sum'] / $paid, 3)
         : '?';
 
-    // Coin image + link for this user
-    $coinImg  = '';
-    $coinLink = '';
-    $userCoin = ($coin && $user->coinid == $coin->id) ? $coin : Coins::findOne((int) $user->coinid);
-    if ($userCoin) {
-        $coinImg  = Html::img(Html::encode($userCoin->image), ['width' => 16, 'alt' => Html::encode($userCoin->symbol)]);
-        $coinLink = Html::a(Html::encode($userCoin->symbol), ['/admin/coinwallet', 'id' => $userCoin->id]);
-    }
+    $pctBad  = $userRate ? round($userBad * 100 / $userRate, 3) : 0;
 
-    $balance = $conv->bitcoinvaluetoa($user->balance);
-    $paidFmt = $conv->bitcoinvaluetoa($paid);
-    $d       = $conv->datetoa2($user->last_earning);
+    $userCoin = $coins[$user->coinid] ?? null;
+    $coinImg  = $userCoin ? Html::img(Html::encode($userCoin->image), ['width' => 16, 'alt' => Html::encode($userCoin->symbol)]) : '';
+    $coinLink = $userCoin ? Html::a(Html::encode($userCoin->symbol), ['/admin/coinwallet', 'id' => $userCoin->id]) : '';
 
     $totalBalance += (float) $user->balance;
     $totalPaid    += $paid;
 ?>
 <tr class="ssrow">
-    <td width="24"><?= (int) $user->id ?></td>
+    <td width="24"><?= (int) $uid ?></td>
     <td width="16"><?= $coinImg ?></td>
     <td width="48"><b><?= $coinLink ?></b></td>
     <td><?= Html::a('<b>' . Html::encode($user->username) . '</b>', ['/?address=' . urlencode($user->username)], ['encode' => false]) ?></td>
-    <td data="<?= (int) $user->last_earning ?>"><?= $d ?></td>
+    <td data="<?= (int) $user->last_earning ?>"><?= $conv->datetoa2($user->last_earning) ?></td>
     <td align="right"><?= $minerCount ?></td>
     <td width="32" data="<?= (int) $userRate ?>" align="right">
         <?= $userRate ? Html::encode($conv->Itoa2($userRate)) : '' ?>
@@ -151,13 +100,13 @@ foreach ($users as $user):
     </td>
     <td align="right"><?= $blockCount ?></td>
     <td align="right"><?= $userRate ? Html::encode((string) $blockDiff) : '' ?></td>
-    <td align="right"><?= Html::encode($balance) ?></td>
-    <td align="right"><?= Html::encode($paidFmt) ?></td>
+    <td align="right"><?= Html::encode($conv->bitcoinvaluetoa($user->balance)) ?></td>
+    <td align="right"><?= Html::encode($conv->bitcoinvaluetoa($paid)) ?></td>
     <td class="actions" align="right">
         <?php if ($user->logtraffic): ?>
-            <?= Html::a('unwatch', ['/admin/loguser', 'id' => $user->id, 'en' => 0]) ?>
+            <?= Html::a('unwatch', ['/admin/loguser', 'id' => $uid, 'en' => 0]) ?>
         <?php else: ?>
-            <?= Html::a('watch',   ['/admin/loguser', 'id' => $user->id, 'en' => 1]) ?>
+            <?= Html::a('watch',   ['/admin/loguser', 'id' => $uid, 'en' => 1]) ?>
         <?php endif ?>
 
         <?php if ($user->is_locked): ?>
@@ -166,7 +115,7 @@ foreach ($users as $user):
             <?= Html::a('block',   ['/admin/blockuser',   'wallet' => $user->username]) ?>
         <?php endif ?>
 
-        <?= Html::a('<span class="red">BAN</span>', ['/admin/banuser', 'id' => $user->id], [
+        <?= Html::a('<span class="red">BAN</span>', ['/admin/banuser', 'id' => $uid], [
             'encode'  => false,
             'onclick' => 'return confirm(' . json_encode('Ban ' . $user->username . '?') . ')',
         ]) ?>
@@ -176,17 +125,16 @@ foreach ($users as $user):
 </tbody>
 
 <?php
-$userCount    = count($users);
-$totalBalance = $conv->bitcoinvaluetoa($totalBalance);
-$totalPaid    = $conv->bitcoinvaluetoa($totalPaid);
-$colspan      = 7; // empty filler columns between Coin and Balance
+$balanceFmt = $conv->bitcoinvaluetoa($totalBalance);
+$paidFmt    = $conv->bitcoinvaluetoa($totalPaid);
+$colspan    = 7;
 ?>
 <tfoot>
 <tr class="ssfoot" style="border-top:2px solid #eee;">
-    <th colspan="3"><b>Users Total (<?= $userCount ?>)</b></th>
+    <th colspan="3"><b>Users Total (<?= count($users) ?>)</b></th>
     <?php for ($c = 0; $c < $colspan; $c++): ?><th></th><?php endfor ?>
-    <th align="right"><b><?= Html::encode($totalBalance) ?></b></th>
-    <th align="right"><b><?= Html::encode($totalPaid) ?></b></th>
+    <th align="right"><b><?= Html::encode($balanceFmt) ?></b></th>
+    <th align="right"><b><?= Html::encode($paidFmt) ?></b></th>
     <th></th>
 </tr>
 <?php if ($coin): ?>
@@ -199,7 +147,7 @@ $colspan      = 7; // empty filler columns between Coin and Balance
 <tr class="ssfoot" style="border-top:2px solid #eee;">
     <th colspan="3"><b>Wallet Profit</b></th>
     <?php for ($c = 0; $c < $colspan; $c++): ?><th></th><?php endfor ?>
-    <th align="right"><b><?= Html::encode($conv->bitcoinvaluetoa($coin->balance - (float) $totalBalance)) ?></b></th>
+    <th align="right"><b><?= Html::encode($conv->bitcoinvaluetoa($coin->balance - $totalBalance)) ?></b></th>
     <th colspan="2"></th>
 </tr>
 <?php endif ?>

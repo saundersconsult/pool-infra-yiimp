@@ -1,17 +1,17 @@
 <?php
 
-/** @var yii\web\View $this */
+/** @var yii\web\View           $this        */
+/** @var int                    $coinId      */
+/** @var app\models\Accounts[]  $list        */
+/** @var app\models\Coins[]     $coins       */
+/** @var app\models\Coins|null  $coin        */
+/** @var array<string,float>    $immatureMap */
+/** @var array<int,float>       $failedMap   */
 
 use yii\helpers\Html;
-use yii\db\Query;
-use app\models\Accounts;
-use app\models\Coins;
 
-$coinId   = (int) Yii::$app->request->get('id', 0);
 $conv     = Yii::$app->ConversionUtils;
-$db       = Yii::$app->db;
 $saveSort = $coinId ? 'false' : 'true';
-
 ?>
 <div align="right" style="margin-top:-14px; margin-bottom:6px;">
     <input class="search" type="search" data-column="all" style="width:140px;" placeholder="Search…">
@@ -27,8 +27,7 @@ table.totals td { text-align:right; }
 table.totals tr.red td { color:darkred; }
 </style>
 
-<?php
-Yii::$app->ViewUtils->showTableSorter('maintable', "{
+<?php Yii::$app->ViewUtils->showTableSorter('maintable', "{
     tableClass: 'dataGrid',
     textExtraction: {
         3: function(node, table, n) { return \$(node).attr('data'); }
@@ -42,8 +41,7 @@ Yii::$app->ViewUtils->showTableSorter('maintable', "{
         filter_childRows: true,
         filter_ignoreCase: true
     }
-}");
-?>
+}"); ?>
 
 <thead>
 <tr>
@@ -60,86 +58,37 @@ Yii::$app->ViewUtils->showTableSorter('maintable', "{
 </thead>
 <tbody>
 <?php
-
-// ── Pre-fetch immature earnings: keyed by "coinid-userid" ────────────────────
-$immatureMap = [];
-$immQuery = $db->createCommand(
-    "SELECT coinid, userid, SUM(amount) AS immature FROM earnings WHERE status = 0"
-    . ($coinId ? " AND coinid = :cid" : "")
-    . " GROUP BY coinid, userid",
-    $coinId ? [':cid' => $coinId] : []
-)->queryAll();
-foreach ($immQuery as $row) {
-    $immatureMap["{$row['coinid']}-{$row['userid']}"] = (float) $row['immature'];
-}
-
-// ── Pre-fetch failed payouts (no tx): keyed by account_id ───────────────────
-$failedMap = [];
-$failQuery = $db->createCommand(
-    "SELECT account_id, SUM(amount) AS failed
-     FROM payouts WHERE (tx IS NULL OR tx = '') AND completed = 0
-     GROUP BY account_id"
-)->queryAll();
-foreach ($failQuery as $row) {
-    $failedMap[(int) $row['account_id']] = (float) $row['failed'];
-}
-
-// ── Active user list ─────────────────────────────────────────────────────────
-$query = Accounts::find()
-    ->where(['!=', 'is_locked', 1])
-    ->andWhere(['or',
-        ['>', 'balance', 0],
-        ['>', 'last_earning', time() - 3600],
-        ['in', 'id',
-            (new Query)->select('account_id')->from('payouts')
-                ->where(['or', ['tx' => null], ['tx' => '']])->distinct()
-        ],
-    ])
-    ->orderBy(['last_earning' => SORT_DESC]);
-
-if ($coinId) {
-    $query->andWhere(['coinid' => $coinId]);
-} else {
-    $query->limit(100);
-}
-
-$list = $query->all();
-
 $totalBalance  = 0.0;
 $totalImmature = 0.0;
 $totalFailed   = 0.0;
 
 foreach ($list as $user):
-    $coin = Coins::findOne((int) $user->coinid);
-    $d    = $conv->datetoa2($user->last_earning);
-
-    $coinBalance = '';
-    $immKey      = $coin ? "{$coin->id}-{$user->id}" : "0-{$user->id}";
-
-    $rawFailed  = $failedMap[$user->id]   ?? 0.0;
-    $rawImmature = $immatureMap[$immKey]  ?? 0.0;
+    $rowCoin    = $coins[$user->coinid] ?? null;
+    $immKey     = $rowCoin ? "{$rowCoin->id}-{$user->id}" : "0-{$user->id}";
+    $rawImmature = $immatureMap[$immKey] ?? 0.0;
+    $rawFailed   = $failedMap[$user->id] ?? 0.0;
 
     $totalBalance  += (float) $user->balance;
     $totalImmature += $rawImmature;
     $totalFailed   += $rawFailed;
 
-    $balanceFmt  = $user->balance  ? $conv->bitcoinvaluetoa($user->balance) : '';
-    $immatureFmt = $rawImmature    ? $conv->bitcoinvaluetoa($rawImmature)   : '';
-    $failedFmt   = $rawFailed      ? $conv->bitcoinvaluetoa($rawFailed)     : '';
+    $coinBalance = $rowCoin
+        ? ($rowCoin->balance ? $conv->bitcoinvaluetoa($rowCoin->balance) : '')
+        : '-';
+    $balanceFmt  = $user->balance ? $conv->bitcoinvaluetoa($user->balance) : '';
+    $immatureFmt = $rawImmature   ? $conv->bitcoinvaluetoa($rawImmature)   : '';
+    $failedFmt   = $rawFailed     ? $conv->bitcoinvaluetoa($rawFailed)     : '';
 ?>
 <tr class="ssrow">
-    <td><?php if ($coin): ?><img width="16" src="<?= Html::encode($coin->image) ?>" alt=""><?php endif ?></td>
+    <td><?php if ($rowCoin): ?><img width="16" src="<?= Html::encode($rowCoin->image) ?>" alt=""><?php endif ?></td>
     <td>
-        <?php if ($coin): ?>
-            <b><?= Html::a(Html::encode($coin->name), ['/admin/coinwallet', 'id' => $coin->id]) ?></b>
-            &nbsp;(<?= Html::encode($coin->symbol_show) ?>)
-            <?php $coinBalance = $coin->balance ? $conv->bitcoinvaluetoa($coin->balance) : ''; ?>
-        <?php else: ?>
-            <?php $coinBalance = '-'; ?>
+        <?php if ($rowCoin): ?>
+            <b><?= Html::a(Html::encode($rowCoin->name), ['/admin/coinwallet', 'id' => $rowCoin->id]) ?></b>
+            &nbsp;(<?= Html::encode($rowCoin->symbol_show) ?>)
         <?php endif ?>
     </td>
     <td><?= Html::a('<b>' . Html::encode($user->username) . '</b>', '/?address=' . urlencode($user->username), ['encode' => false]) ?></td>
-    <td data="<?= (int) $user->last_earning ?>"><?= $d ?></td>
+    <td data="<?= (int) $user->last_earning ?>"><?= $conv->datetoa2($user->last_earning) ?></td>
     <td class="currency"><?= Html::encode($coinBalance) ?></td>
     <td class="currency"><?= Html::encode($balanceFmt) ?></td>
     <td class="currency"><?= Html::encode($immatureFmt) ?></td>
@@ -163,24 +112,23 @@ foreach ($list as $user):
 </tfoot>
 </table>
 
-<?php if ($coinId):
-    $coin   = Coins::findOne($coinId);
-    $symbol = $coin ? $coin->symbol : '';
+<?php if ($coinId && $coin):
+    $symbol = Html::encode($coin->symbol);
 ?>
 <div class="totals" align="right">
     <table class="totals">
         <tr>
             <th>Balances</th>
-            <td><?= Html::encode($conv->bitcoinvaluetoa($totalBalance)) ?> <?= Html::encode($symbol) ?></td>
+            <td><?= Html::encode($conv->bitcoinvaluetoa($totalBalance)) ?> <?= $symbol ?></td>
         </tr>
         <tr>
             <th>Immature</th>
-            <td><?= Html::encode($conv->bitcoinvaluetoa($totalImmature)) ?> <?= Html::encode($symbol) ?></td>
+            <td><?= Html::encode($conv->bitcoinvaluetoa($totalImmature)) ?> <?= $symbol ?></td>
         </tr>
         <?php if ($totalFailed > 0): ?>
         <tr class="red">
             <th>Failed</th>
-            <td><?= Html::encode($conv->bitcoinvaluetoa($totalFailed)) ?> <?= Html::encode($symbol) ?></td>
+            <td><?= Html::encode($conv->bitcoinvaluetoa($totalFailed)) ?> <?= $symbol ?></td>
         </tr>
         <tr>
             <td colspan="2">
@@ -189,7 +137,7 @@ foreach ($list as $user):
                     ['/admin/cancelUsersPayment', 'id' => $coinId],
                     [
                         'title'   => 'Add all failed payouts back to user balances',
-                        'onclick' => 'return confirm("Restore all failed payouts for ' . Html::encode($symbol) . ' to user balances?")',
+                        'onclick' => 'return confirm("Restore all failed payouts for ' . $symbol . ' to user balances?")',
                     ]
                 ) ?>
             </td>

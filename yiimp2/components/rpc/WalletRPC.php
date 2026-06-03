@@ -63,20 +63,48 @@ class WalletRPC
                 case 'GETH':
                     $this->type    = 'Ethereum';
                     $this->account = empty($coin->account) ? $coin->master_wallet : $coin->account;
-                    $this->rpc     = new EthereumRPC($coin->rpchost, $coin->rpcport);
+                    $this->rpc     = new EthereumRPC(
+                        (string) ($coin->rpchost ?? 'localhost'),
+                        (int)    ($coin->rpcport ?? 8545)
+                    );
+                    if (empty($coin->rpchost)) {
+                        $this->error = 'RPC not configured';
+                    }
                     break;
 
                 case 'XMR':
                     $this->type      = 'CryptoNote';
                     $this->coin      = $coin;
-                    $this->rpc       = new MoneroRPC($coin->rpchost, $coin->rpcport, $coin->rpcuser, $coin->rpcpasswd);
-                    $this->rpcWallet = new MoneroRPC('127.0.0.1', $coin->rpcport, $coin->rpcuser, $coin->rpcpasswd);
+                    $this->rpc       = new MoneroRPC(
+                        (string) ($coin->rpchost   ?? 'localhost'),
+                        (int)    ($coin->rpcport   ?? 18081),
+                        (string) ($coin->rpcuser   ?? ''),
+                        (string) ($coin->rpcpasswd ?? '')
+                    );
+                    $this->rpcWallet = new MoneroRPC(
+                        '127.0.0.1',
+                        (int)    ($coin->rpcport   ?? 18081),
+                        (string) ($coin->rpcuser   ?? ''),
+                        (string) ($coin->rpcpasswd ?? '')
+                    );
+                    if (empty($coin->rpchost)) {
+                        $this->error = 'RPC not configured';
+                    }
                     break;
 
                 default:
                     $this->type       = 'Bitcoin';
-                    $this->rpc        = new cBitcoinRPC($coin->rpcuser, $coin->rpcpasswd, $coin->rpchost, $coin->rpcport, $url);
+                    $this->rpc        = new cBitcoinRPC(
+                        (string) ($coin->rpcuser   ?? ''),
+                        (string) ($coin->rpcpasswd ?? ''),
+                        (string) ($coin->rpchost   ?? 'localhost'),
+                        (int)    ($coin->rpcport   ?? 8332),
+                        $url
+                    );
                     $this->hasGetInfo = (bool) ($coin->hasgetinfo ?? false);
+                    if (empty($coin->rpcuser)) {
+                        $this->error = 'RPC not configured';
+                    }
                     break;
             }
         } else {

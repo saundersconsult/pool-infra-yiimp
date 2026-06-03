@@ -1,49 +1,38 @@
 <?php
 
-use app\models\Connections;
+/** @var yii\web\View              $this     */
+/** @var app\models\Connections[]  $list     */
+/** @var string|null               $lastTime */
 
-$last = (new \yii\db\Query())
-				->select(['max(last)'])
-				->from('connections')
-				->scalar();
-$list = Connections::find()->orderBy('id desc')->all();
+use yii\helpers\Html;
 
-//echo "<table class='dataGrid'>";
 Yii::$app->ViewUtils->showTableSorter('maintable');
-echo "<thead>";
-echo "<tr>";
-echo "<th>ID</th>";
-echo "<th>User</th>";
-echo "<th>Host</th>";
-echo "<th>Database</th>";
-echo "<th>Idle</th>";
-echo "<th>Created</th>";
-echo "<th>Last</th>";
-echo "<th></th>";
-echo "</tr>";
-echo "</thead><tbody>";
-
-foreach($list as $conn)
-{
-	echo "<tr class='ssrow'>";
-
-	$d1 = Yii::$app->ConversionUtils->sectoa($conn->idle);
-	$d2 = Yii::$app->ConversionUtils->datetoa2($conn->created);
-	$d3 = Yii::$app->ConversionUtils->datetoa2($conn->last);
-	$b = Yii::$app->ConversionUtils->Booltoa($conn->last == $last);
-
-	echo "<td>$conn->id</td>";
-	echo "<td>$conn->user</td>";
-	echo "<td>$conn->host</td>";
-	echo "<td>$conn->db</td>";
-	echo "<td>$d1</td>";
-	echo "<td>$d2</td>";
-	echo "<td>$d3</td>";
-	echo "<td>$b</td>";
-
-	echo "</tr>";
-}
-
-echo "</tbody></table><br>";
-
-echo count($list)." connections to the database<br>";
+?>
+<thead>
+<tr>
+    <th>ID</th>
+    <th>User</th>
+    <th>Host</th>
+    <th>Database</th>
+    <th>Idle</th>
+    <th>Created</th>
+    <th>Last</th>
+    <th></th>
+</tr>
+</thead>
+<tbody>
+<?php foreach ($list as $conn): ?>
+<tr class="ssrow">
+    <td><?= (int) $conn->id ?></td>
+    <td><?= Html::encode($conn->user) ?></td>
+    <td><?= Html::encode($conn->host) ?></td>
+    <td><?= Html::encode($conn->db) ?></td>
+    <td><?= Yii::$app->ConversionUtils->sectoa($conn->idle) ?></td>
+    <td><?= Yii::$app->ConversionUtils->datetoa2($conn->created) ?></td>
+    <td><?= Yii::$app->ConversionUtils->datetoa2($conn->last) ?></td>
+    <td><?= Yii::$app->ConversionUtils->Booltoa($conn->last == $lastTime) ?></td>
+</tr>
+<?php endforeach ?>
+</tbody>
+</table><br>
+<?= count($list) ?> connections to the database<br>
