@@ -62,6 +62,28 @@ RUN make buildonly && cp stratum /usr/bin/
 # create default log directory
 RUN mkdir /var/log/yiimp
 
+# ── Tailwind CSS build ────────────────────────────────────────────────────────
+# Runs in an isolated Node.js image so Node/npm never enter the production image.
+# Output: web/css/tailwind.css (copied into image-prod below).
+#
+# Commit yiimp2/package-lock.json to source control so this stage uses
+# `npm ci` for fully reproducible, lock-file-verified installs.
+FROM node:20-alpine AS tailwind-build
+WORKDIR /build
+
+# Install npm deps (layer cached unless package.json changes)
+COPY /yiimp2/package.json /yiimp2/package-lock.json* ./
+RUN npm install --prefer-offline
+
+# Copy only the files the Tailwind CLI content-scanner needs
+COPY /yiimp2/tailwind.config.js ./
+COPY /yiimp2/src/             ./src/
+COPY /yiimp2/views/           ./views/
+COPY /yiimp2/components/      ./components/
+
+# Compile — writes to web/css/tailwind.css (relative to package.json)
+RUN mkdir -p web/css && npm run build
+
 # Build devel image
 FROM baseimage as image-devel
 
@@ -86,6 +108,12 @@ COPY --chown=www-data:www-data /yiimp2/ /var/yiimp2/
 WORKDIR /var/yiimp2/
 ENV COMPOSER_ALLOW_SUPERUSER=1
 RUN composer install --no-dev --optimize-autoloader --no-interaction
+
+# Copy pre-compiled Tailwind CSS from the build stage.
+# YIIMP_TAILWIND_CDN defaults to true (CDN mode) so this file is only used
+# when an operator sets YIIMP_TAILWIND_CDN=false in serverconfig.php.
+COPY --from=tailwind-build --chown=www-data:www-data \
+    /build/web/css/tailwind.css /var/yiimp2/web/css/tailwind.css
 
 # Ensure the Yii2 runtime and asset directories are writable by www-data
 RUN mkdir -p /var/yiimp2/runtime /var/yiimp2/web/assets \

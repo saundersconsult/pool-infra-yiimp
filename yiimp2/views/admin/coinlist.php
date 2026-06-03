@@ -153,10 +153,16 @@ $pageSizeOptions = [25 => '25', 50 => '50', 100 => '100', 250 => '250'];
 <?php endif ?>
 
 <?php
-Yii::$app->ViewUtils->showTableSorter('maintable', "{
-    tableClass: 'dataGrid',
-    textExtraction: { 6: function(node,table,n){ return \$(node).attr('data'); } },
-    widgets: ['zebra'],
-    widgetOptions: {}
-}");
+// Register tablesorter JS only — the <table> is already in the HTML above.
+// showTableSorter() also echoes a <table> opening tag, which would create a
+// second unclosed table after the bottom pager and break the layout visually.
+Yii::$app->ViewUtils->JavascriptReady("
+    \$('#maintable').tablesorter({
+        tableClass: 'dataGrid',
+        textExtraction: { 6: function(node,table,n){ return \$(node).attr('data'); } },
+        widgets: ['zebra'],
+        widgetOptions: {}
+    });
+    \$('.tablesorter-header').not('.sorter-false').css('cursor', 'pointer');
+");
 ?>

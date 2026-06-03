@@ -14,7 +14,7 @@ use app\services\BlockService;
  * Admin-only market actions, routed via /admin/market/* URL rules.
  * Ported from web/yaamp/modules/market/MarketController.php.
  */
-class MarketController extends Controller
+class MarketController extends BaseController
 {
     public function behaviors(): array
     {

@@ -17,7 +17,7 @@ use app\components\rpc\WalletRPC;
  *
  * Session key 'renting-deposit' stores the authenticated renter's deposit address.
  */
-class RentingController extends Controller
+class RentingController extends BaseController
 {
     public function actions(): array
     {

@@ -79,12 +79,11 @@ $jsHomeUrl  = json_encode($homeUrl);
 <style>
 /*
  * Two-column layout — Bootstrap row/col replaces the old <table> so that
- * column widths are firm when jqplot measures its containers.
+ * column widths are firm before Chart.js measures its containers.
  */
 .wallet-col        { min-width: 0; }
 .graph-wrap        { overflow: hidden; width: 100%; }
 .graph-wrap canvas { max-width: 100% !important; }
-.jqplot-target     { overflow: hidden !important; }
 .main-left-box     { margin-bottom: 1rem; }
 
 /* AJAX placeholder: reserve vertical space while content loads */
@@ -189,8 +188,6 @@ $jsHomeUrl  = json_encode($homeUrl);
 </div><!-- /row -->
 
 <script>
-var _plotEarnings = null;
-var _plotHashrate = {};
 
 var _username = <?= $jsUsername ?>;
 var _homeUrl  = <?= $jsHomeUrl ?>;
@@ -287,20 +284,9 @@ function main_refresh_hashrate(algo) {
 }
 
 function graph_init_hashrate(data, algo) {
-    $('#graph_results_' + algo).empty();
     try {
-        var t = $.parseJSON(data);
-        _plotHashrate[algo] = $.jqplot('graph_results_' + algo, t[0], {
-            title: '<b>' + t[1] + '</b>',
-            axes: {
-                xaxis: { tickInterval: 7200, renderer: $.jqplot.DateAxisRenderer,
-                         tickOptions: { formatString: '<font size=1>%#Hh</font>' } },
-                yaxis: { min: 0, tickOptions: { formatString: '<font size=1>%#.3f &nbsp;</font>' } }
-            },
-            seriesDefaults: { markerOptions: { style: 'none' } },
-            grid: { borderWidth: 1, shadowWidth: 0, shadowDepth: 0, background: '#ffffff' },
-            highlighter: { show: true }
-        });
+        var t = JSON.parse(data); // [[[s1],[s2],[s3]], "title"]
+        yiimpChart('graph_results_' + algo, t, { labels: ['Raw', 'Smoothed', 'Rejected'] });
     } catch(e) {}
 }
 
@@ -312,18 +298,13 @@ function graph_earnings_refresh() {
 }
 
 function graph_earnings_init(data) {
-    $('#graph_earnings_results').empty();
     try {
-        var t = $.parseJSON(data);
-        _plotEarnings = $.jqplot('graph_earnings_results', t, {
-            stackSeries: true,
-            axes: {
-                xaxis: { tickInterval: 7200, renderer: $.jqplot.DateAxisRenderer,
-                         tickOptions: { formatString: '<font size=1>%#Hh</font>' } },
-                yaxis: { min: 0, tickOptions: { formatString: '<font size=1>%#.8f &nbsp;</font>' } }
-            },
-            seriesDefaults: { markerOptions: { style: 'none' } },
-            grid: { borderWidth: 1, shadowWidth: 0, shadowDepth: 0, background: '#ffffff' }
+        yiimpChart('graph_earnings_results', JSON.parse(data), {
+            fill:       true,
+            stack:      true,
+            labels:     ['Balance', 'Pending'],
+            colors:     ['#4bb2c5', '#eaa228'],
+            btcDecimals: true
         });
     } catch(e) {}
 }
@@ -339,11 +320,5 @@ function drop_cookie(el) {
     window.location.href = '?address=' + encodeURIComponent(_address) + '&drop=' + encodeURIComponent(addr);
 }
 
-/* ── resize: replot all active charts ────────────────────────────────────── */
-$(window).on('resize', function() {
-    if (_plotEarnings) { try { _plotEarnings.replot(); } catch(e) {} }
-    $.each(_plotHashrate, function(algo, plot) {
-        if (plot) { try { plot.replot(); } catch(e) {} }
-    });
-});
+/* Chart.js uses ResizeObserver internally — no manual resize needed */
 </script>

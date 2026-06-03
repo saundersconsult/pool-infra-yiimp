@@ -21,7 +21,7 @@ use app\components\JobRegistry;
  *   jobs/run-now    — POST: cancel current delay and push immediately
  *   jobs/seed-all   — POST: push any jobs that have no queue row
  */
-class JobsController extends Controller
+class JobsController extends BaseController
 {
     public function behaviors(): array
     {

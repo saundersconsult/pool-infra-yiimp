@@ -12,7 +12,7 @@ use app\services\BenchService;
  * Ported from web/yaamp/modules/bench/BenchController.php.
  * actionDel() lives in AdminController::actionBenchdel().
  */
-class BenchController extends Controller
+class BenchController extends BaseController
 {
     public function actionIndex(): string
     {

@@ -11,7 +11,7 @@ use app\models\Nicehash;
  * Admin UI for NiceHash order management (pool buys hash power FROM NiceHash).
  * Ported from web/yaamp/modules/nicehash/NicehashController.php.
  */
-class NicehashController extends Controller
+class NicehashController extends BaseController
 {
     public function behaviors(): array
     {

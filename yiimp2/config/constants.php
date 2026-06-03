@@ -33,3 +33,5 @@ if (!defined('YIIMP_KWH_USD_PRICE'))        define('YIIMP_KWH_USD_PRICE',       
 if (!defined('YIIMP_CLI_ALLOW_TXS'))        define('YIIMP_CLI_ALLOW_TXS',        false);
 if (!defined('YIIMP_CLI_ALLOW_DISTCLEAN'))  define('YIIMP_CLI_ALLOW_DISTCLEAN',  false);
 if (!defined('YIIMP_MAINTENANCE_MODE'))     define('YIIMP_MAINTENANCE_MODE',     false);
+if (!defined('YIIMP_LAYOUT'))               define('YIIMP_LAYOUT',               'legacy');
+if (!defined('YIIMP_TAILWIND_CDN'))         define('YIIMP_TAILWIND_CDN',         true);

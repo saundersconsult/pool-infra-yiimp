@@ -3,6 +3,7 @@
 /** @var yii\web\View $this */
 
 use app\models\Blocks;
+use app\models\Coins;
 
 function WriteBoxHeader($title)
 {
@@ -45,8 +46,11 @@ if(isset($r_algo) && (!is_null($r_algo))) {
 	$coins_subquery->andWhere(['in', 'algo', $r_algo]);
 }
 $db_blocks = Blocks::find()
-    ->where(['in','category', ['stake','generated']])
+    ->where(['in', 'category', ['stake', 'generated']])
     ->andWhere(['in', 'coin_id', $coins_subquery])
+    ->with('coin')
+    ->orderBy('time DESC')
+    ->limit($count)
     ->all();
 
 echo <<<EOT
@@ -125,7 +129,7 @@ foreach($db_blocks as $db_block)
 	}
 
 	$reward = round($db_block->amount, 3);
-	$coin = $db_block->coin ? $db_block->coin : getdbo('db_coins', $db_block->coin_id);
+	$coin = $db_block->coin ?? Coins::findOne((int) $db_block->coin_id);
 	$difficulty = Yii::$app->ConversionUtils->Itoa2($db_block->difficulty, 3);
 	$height = number_format($db_block->height, 0, '.', ' ');
 

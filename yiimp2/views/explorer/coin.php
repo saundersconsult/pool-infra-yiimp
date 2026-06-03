@@ -119,93 +119,24 @@ if ($start != $coin->block_height)
 	return;
 
 echo <<<end
-<div id="diff_graph" style="margin-right: 8px; margin-top: -16px;">
-<br><br><br><br><br><br><br><br><br><br><br><br><br><br>
-</div>
+<div id="diff_graph" style="margin-right:8px;margin-top:-16px;height:220px;"></div>
 
-<style type="text/css">
-.jqplot-title {
-	margin-bottom: 3px;
-}
-.jqplot-xaxis-tick {
-	margin-top: 4px;
-	font-size: 10px;
-}
-.jqplot-yaxis-tick {
-	font-size: 7pt;
-	margin-top: -4px;
-	margin-right: 8px;
-}
-</style>
-
-<script type="text/javascript" event="">
-
+<script type="text/javascript">
 var last_graph_update = 0;
-
-function graph_refresh()
-{
-	var now = Date.now()/1000;
-
-	if (now < last_graph_update + 900) return;
-	last_graph_update = now;
-
-	var url = "/explorer/graph?id={$coin->id}";
-	$.get(url, '', diff_graph_data);
+function graph_refresh() {
+    var now = Date.now() / 1000;
+    if (now < last_graph_update + 900) return;
+    last_graph_update = now;
+    $.get('/explorer/graph?id={$coin->id}', '', diff_graph_data);
 }
-
-function diff_graph_data_trace(data)
-{
-	 $('#diff_graph').html(data);
-}
-
-function diff_graph_data(data)
-{
-	var t = $.parseJSON(data);
-	var plot1 = $.jqplot('diff_graph', t,
-	{
-		title: '<b>Network diff</b>',
-		axes: {
-			xaxis: {
-				renderer: $.jqplot.DateAxisRenderer,
-				tickOptions: { formatString: '%H:%M' }
-			},
-			yaxis: {
-				min: 0.0,
-				tickOptions: { labelPosition: 'top', formatString: '%.3f' }
-			}
-		},
-
-		seriesDefaults:
-		{
-			markerOptions: { style: 'none' }
-		},
-
-		series:[
-			{
-				highlighter: { yvalues: 2, formatString: '<font size="1">%s %.3f<br/>Block %u</font>' }
-			},
-			{
-				showLine: false,
-				markerOptions: { style: 'circle', size: 6, color: 'silver' },
-				animation: { show: true },
-				highlighter: { yvalues: 3, formatString: '<font size="1">%s <span style="display:none;">%.1f</span>%g<br/>User block %u</font>' }
-			}
-		],
-
-		grid:
-		{
-			borderWidth: 1,
-			shadowWidth: 0,
-			shadowDepth: 0,
-			background: '#ffffff'
-		},
-
-		highlighter:
-		{
-			show: true
-		},
-
-	});
+function diff_graph_data(data) {
+    var t = JSON.parse(data);
+    if (!t || !t.length) return;
+    var s1 = t[0].map(function(p) { return [p[0], p[1]]; });
+    var s2 = t[1] ? t[1].map(function(p) { return [p[0], p[1]]; }) : null;
+    yiimpChart('diff_graph', s2 ? [s1, s2] : [s1], {
+        title: 'Network diff', labels: ['Difficulty', 'Pool blocks'], decimals: 3
+    });
 }
 </script>
 end;

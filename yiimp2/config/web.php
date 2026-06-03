@@ -118,6 +118,10 @@ $config = [
         'settings' => [
             'class' => \app\services\SettingsService::class,
         ],
+        'LayoutManager' => [
+            'class'  => 'app\components\LayoutManager',
+            'scheme' => YIIMP_LAYOUT,
+        ],
         'YiimpUtils' => [
             'class' => 'app\components\YiimpUtils',
         ],

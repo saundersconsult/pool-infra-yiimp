@@ -4,7 +4,6 @@ namespace app\controllers;
 
 use Yii;
 use yii\filters\AccessControl;
-use yii\web\Controller;
 use yii\web\Response;
 use yii\filters\VerbFilter;
 use app\models\LoginForm;
@@ -25,7 +24,7 @@ use app\services\CoinService;
 use app\services\BlockService;
 use yii\helpers\ArrayHelper;
 
-class AdminController extends Controller
+class AdminController extends BaseController
 {
     public $defaultAction='dashboard';
 

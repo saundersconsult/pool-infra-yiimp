@@ -20,15 +20,12 @@ class AppAsset extends AssetBundle
         'css/uni-form.css'
     ];
     public $js = [
-        'js/jquery.tablesorter.js',
-        'js/jqplot/jquery.jqplot.js',
-        'js/jqplot/plugins/jqplot.barRenderer.js',
-        'js/jqplot/plugins/jqplot.dateAxisRenderer.js',
-        'js/jqplot/plugins/jqplot.highlighter.js',
-        'js/jqplot/plugins/jqplot.cursor.js',
+        'js/yiimp_charts.js',
     ];
     public $depends = [
         'yii\web\YiiAsset',
-        'yii\bootstrap5\BootstrapAsset'
+        'yii\bootstrap5\BootstrapAsset',
+        'app\assets\ChartAsset',
+        'app\assets\TablesorterAsset',
     ];
 }

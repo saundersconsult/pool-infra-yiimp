@@ -88,14 +88,8 @@ function status_refresh()       { $.get('/renting/status_results', '', function(
 
 function graph_price_refresh() {
     $.get('/renting/graph_price_results', '', function (data) {
-        $('#graph_results_price').empty();
-        var t = $.parseJSON(data);
-        $.jqplot('graph_results_price', t, {
-            title: '<b>Renting Price (mBTC/Mh/day)</b>',
-            axes: { xaxis: { tickInterval: 7200, renderer: $.jqplot.DateAxisRenderer, tickOptions: {formatString: '<font size=1>%#Hh</font>'} },
-                    yaxis: { min: 0, tickOptions: {formatString: '<font size=1>%#.3f &nbsp;</font>'} } },
-            seriesDefaults: { markerOptions: { style: 'none' } },
-            grid: { borderWidth: 1, shadowWidth: 0, shadowDepth: 0, background: '#ffffff' }
+        yiimpChart('graph_results_price', JSON.parse(data), {
+            title: 'Renting Price (mBTC/Mh/day)', labels: ['Raw', 'Smoothed']
         });
     });
 }
@@ -135,14 +129,8 @@ function show_job_graph(jobid) {
     } else {
         $ph.show();
         $.get('/renting/graph_job_results?jobid=' + jobid, '', function (data) {
-            $('#graph_results_job-' + jobid).empty();
-            var t = $.parseJSON(data);
-            $.jqplot('graph_results_job-' + jobid, t, {
-                title: '<b>Hashrate (Mh/s)</b>',
-                axes: { xaxis: { tickInterval: 7200, renderer: $.jqplot.DateAxisRenderer, tickOptions: {formatString: '<font size=1>%#Hh</font>'} },
-                        yaxis: { min: 0, tickOptions: {formatString: '<font size=1>%#.3f &nbsp;</font>'} } },
-                seriesDefaults: { markerOptions: { style: 'none' } },
-                grid: { borderWidth: 1, shadowWidth: 0, shadowDepth: 0, background: '#ffffff' }
+            yiimpChart('graph_results_job-' + jobid, JSON.parse(data), {
+                title: 'Hashrate (Mh/s)', labels: ['Raw', 'Smoothed', 'Rejected']
             });
         });
     }
