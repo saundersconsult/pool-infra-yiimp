@@ -10,9 +10,9 @@ $html = Html::a('<b>COIN PROPERTIES</b>', '/admin/coinwallet_update?id=' . $coin
 
 if ($info) {
     $html .= ' || ' . $coin->createExplorerLink('<b>EXPLORER</b>');
-    $html .= ' || ' . Html::a('<b>PEERS</b>',    '/admin/coinwallet_peers?id='   . $coin->id);
+    $html .= ' || ' . Html::a('<b>PEERS</b>',    '/admin/coinpeers?id='   . $coin->id);
     if (YIIMP_ADMIN_WEBCONSOLE)
-        $html .= ' || ' . Html::a('<b>CONSOLE</b>', '/admin/coinwallet_console?id=' . $coin->id);
+        $html .= ' || ' . Html::a('<b>CONSOLE</b>', '/admin/coinwallet-console?id=' . $coin->id);
     $html .= ' || ' . Html::a('<b>TRIGGERS</b>', '/admin/cointriggers?id='        . $coin->id);
     if ($src !== 'wallet')
         $html .= ' || ' . Html::a('<b>' . Html::encode($coin->symbol) . '</b>', '/admin/coinwallet?id=' . $coin->id);
@@ -22,8 +22,8 @@ if (!$info && $coin->enable)
     $html .= '<br/>' . Html::a('<b>STOP COIND</b>', '/admin/stopcoin?id=' . $coin->id);
 
 $html .= '<br/>' . ($coin->auto_ready
-    ? Html::a('<b>UNSET AUTO</b>', '/admin/coinwallet_unsetauto?id=' . $coin->id)
-    : Html::a('<b>SET AUTO</b>',   '/admin/coinwallet_setauto?id='   . $coin->id));
+    ? Html::a('<b>UNSET AUTO</b>', '/admin/coinwallet-unsetauto?id=' . $coin->id)
+    : Html::a('<b>SET AUTO</b>',   '/admin/coinwallet-setauto?id='   . $coin->id));
 
 $html .= '<br/>';
 if (!empty($coin->link_bitcointalk)) $html .= Html::a('forum',  $coin->link_bitcointalk, ['target' => '_blank']) . ' ';

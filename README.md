@@ -13,12 +13,12 @@ A fork of the original Yaamp project. Supports a large number of PoW mining algo
 |-----------|------|-----------|
 | Stratum server | `stratum/` | C++ — handles miner connections per algo |
 | Legacy web app | `web/` | Yii 1.1 / PHP 8 — pool logic, payouts, markets |
-| Modern web app | `yiimp2/` | Yii 2.0 / PHP 8 — in-progress migration target |
+| Modern web app | `yiimp2/` | Yii 2.0 / PHP 8 — fully migrated admin, stats, API, jobs |
 | Background jobs | `yiimp2/jobs/` | yii2-queue delayed jobs (replaces shell loops) |
 | Config templates | `config/` | Supervisor, Apache vhosts, HAProxy |
 
-The pool currently runs both applications side by side.  
-`web/` handles all production logic; `yiimp2/` is the migration target and already serves the admin panel, stats, and API on port 8090.
+The pool runs both applications side by side.  
+`web/` handles the legacy pool frontend; `yiimp2/` serves the admin panel, stats, API, and all background jobs on port 8090. The Yii1→Yii2 migration is complete for the admin and background-job layers.
 
 ---
 
@@ -34,7 +34,7 @@ The pool currently runs both applications side by side.
 ## Build
 
 ```bash
-# Production image
+# Production image (includes Tailwind CSS compilation)
 make build
 # or directly:
 podman build --tag yiimp --target image-prod -f Dockerfile.yiimp
@@ -42,6 +42,8 @@ podman build --tag yiimp --target image-prod -f Dockerfile.yiimp
 # Development image (includes Xdebug)
 make build-devel
 ```
+
+The production build includes an isolated `node:20-alpine` stage that compiles Tailwind CSS (`yiimp2/web/css/tailwind.css`) — no Node.js enters the final image.
 
 ---
 
@@ -73,8 +75,6 @@ done
 
 ### yii2-queue table (required for the Yii2 background job system)
 
-Apply the dedicated migration file with a privileged account before starting the container:
-
 ```bash
 mysql -u root -p yaamp < sql/2026-05-22-add_queue_table.sql
 ```
@@ -87,18 +87,12 @@ mysql -u root -p yaamp < sql/2026-05-22-add_queue_table.sql
 
 ```bash
 mkdir -p ./config ./log
-```
-
-Copy and edit the templates:
-
-```bash
 cp web/serverconfig.sample.php config/serverconfig.php
-cp config/supervisord.conf config/supervisord.conf   # already a template
 ```
 
 ### 2. `config/serverconfig.php` — key settings
 
-All constants use the `YIIMP_` prefix. The `web/` (Yii 1.1) legacy code used the old `YAAMP_` prefix; backward-compatible shims are automatically defined at the bottom of the file — do not add separate `YAAMP_` defines.
+All constants use the `YIIMP_` prefix. Backward-compatible `YAAMP_` shims are defined automatically for the legacy Yii1 layer.
 
 ```php
 // Database
@@ -131,23 +125,31 @@ define('YIIMP_RENTAL',         false);
 define('YIIMP_ALLOW_EXCHANGE', false);
 define('YIIMP_PRODUCTION',     true);
 
+// ── UI layout (optional) ────────────────────────────────────────────────────
+// Selects the visual theme for the Yii2 admin/public interface.
+// Options: 'legacy' (default) | 'adminlte' | 'tailwind'
+// define('YIIMP_LAYOUT', 'adminlte');
+
+// Tailwind CSS delivery (only relevant when YIIMP_LAYOUT = 'tailwind')
+// true  = Play CDN (dev, no build step needed)
+// false = compiled web/css/tailwind.css from Docker build stage (production)
+// define('YIIMP_TAILWIND_CDN', true);
+
 // NiceHash v2 (optional — pool buys hash power from NiceHash)
 // define('YIIMP_USE_NICEHASH_API', true);
-// define('NICEHASH_API_KEY',       'uuid-key');       // API key UUID
-// define('NICEHASH_API_SECRET',    'hmac-secret');    // signing secret
-// define('NICEHASH_ORG_ID',        'uuid-org');       // organisation UUID
+// define('NICEHASH_API_KEY',       'uuid-key');
+// define('NICEHASH_API_SECRET',    'hmac-secret');
+// define('NICEHASH_ORG_ID',        'uuid-org');
 ```
 
-Full reference: `yiimp2/serverconfig.sample.php` (Yii2-only, no `YAAMP_` aliases).  
-The legacy `web/serverconfig.sample.php` also defines the backward-compatible `YAAMP_*` shims needed by the Yii1 layer.
+Full reference: `yiimp2/serverconfig.sample.php`.
 
 ### 3. `config/supervisord.conf`
 
-The container uses supervisord to manage all pool processes.  
-The file in `config/supervisord.conf` is the authoritative template — copy it, then:
+The container uses supervisord to manage all pool processes.
 
-- **Add stratum processes** for each algorithm you want to mine (copy the `[program:stratum-scrypt]` block, rename, and point to the correct `.conf` file)
-- The three background job queue workers (`yiimp-queue-seed`, `yiimp-queue-blocks`, `yiimp-queue-general`) are pre-configured and replace the old `main.sh` / `loop2.sh` / `blocks.sh` shell loops
+- **Add stratum processes** for each algorithm (copy the `[program:stratum-scrypt]` block)
+- Three background job workers (`yiimp-queue-seed`, `yiimp-queue-blocks`, `yiimp-queue-general`) are pre-configured
 
 Example stratum entry:
 
@@ -159,7 +161,7 @@ autorestart=true
 user=root
 ```
 
-Stratum config files go in `config/stratum/`. Use `config/stratum/scrypt.conf` as a template.
+Stratum config files go in `config/stratum/`.
 
 ---
 
@@ -180,23 +182,19 @@ podman run -dt --name=yiimp --network=host \
   yiimp
 ```
 
-On first start, `yiimp-queue-seed` runs once and pushes all 22 recurring background jobs into the queue. Subsequent restarts are idempotent (existing jobs are not duplicated).
-
 ### Development mode
 
 ```bash
 make run-devel
 ```
 
-This mounts the local source directories into the container so changes take effect immediately without a rebuild.
+Mounts local source directories into the container — changes take effect without a rebuild.
 
 ---
 
 ## Supervisor management
 
-The supervisor web UI is available at **http://localhost:8900** (credentials: `yiimp` / `supervisor` by default — change in `supervisord.conf`).
-
-From the command line inside the container:
+Supervisor web UI: **http://localhost:8900** (credentials: `yiimp` / `supervisor`).
 
 ```bash
 supervisorctl -u yiimp -p supervisor -s http://127.0.0.1:8900 status
@@ -204,22 +202,13 @@ supervisorctl -u yiimp -p supervisor -s http://127.0.0.1:8900 start stratum-x11
 supervisorctl -u yiimp -p supervisor -s http://127.0.0.1:8900 stop  stratum-x11
 ```
 
-Or from the host if the container uses `--network=host`:
-
-```bash
-supervisorctl -u yiimp -p supervisor -s http://127.0.0.1:8900 status
-```
-
 ---
 
 ## Background jobs (yii2-queue)
 
-The legacy `main.sh` / `loop2.sh` / `blocks.sh` shell loops have been replaced by **yii2-queue delayed jobs**.  
-Each job reschedules itself automatically — no polling intervals to configure.
+The legacy `main.sh` / `loop2.sh` / `blocks.sh` shell loops have been replaced by **yii2-queue delayed jobs**.
 
 ### Option A — Supervisor (recommended for production)
-
-Three processes in `supervisord.conf` manage the workers:
 
 | Process | Workers | Purpose |
 |---------|---------|---------|
@@ -229,27 +218,15 @@ Three processes in `supervisord.conf` manage the workers:
 
 ### Option B — Plain bash console
 
-If you are not using Docker/Supervisor, two scripts in `yiimp2/` provide the same functionality:
-
 ```bash
-# Seed the queue and start 2 parallel workers (Ctrl-C to stop)
 cd yiimp2
-./start.sh
-
-# Or choose a different worker count
-./start.sh 4
-
-# Run a single persistent worker (for multiple terminal windows)
-./worker.sh
-
-# Drain the queue once and exit (useful for testing)
-./worker.sh once
+./start.sh        # seed + 2 workers (Ctrl-C to stop)
+./start.sh 4      # seed + 4 workers
+./worker.sh       # single persistent worker
+./worker.sh once  # drain queue once and exit
 ```
 
-`start.sh` seeds the queue on startup, starts N workers, and auto-restarts any worker that crashes.  
-`worker.sh` is a single-worker building block for multi-terminal or custom process manager setups.
-
-The admin **Jobs dashboard** at `/jobs` shows live status for all 25 jobs and provides pause / resume / run-now controls.
+The admin **Jobs dashboard** at `/jobs` shows live status for all 25 jobs with pause / resume / run-now controls.
 
 ---
 
@@ -258,72 +235,83 @@ The admin **Jobs dashboard** at `/jobs` shows live status for all 25 jobs and pr
 | URL | Description |
 |-----|-------------|
 | `http://host:8080/` | Legacy Yii1 pool frontend |
-| `http://host:8090/` | Yii2 modern frontend (admin, stats, API docs) |
+| `http://host:8090/` | Yii2 frontend (admin, stats, wallet, API) |
 | `http://host:8900/` | Supervisord web UI |
 
-**Admin login**: navigate to `/admin` and enter the credentials from `YIIMP_ADMIN_USER` / `YIIMP_ADMIN_PASS` in `serverconfig.php`.
+**Admin**: navigate to `/admin` and enter `YIIMP_ADMIN_USER` / `YIIMP_ADMIN_PASS`.
 
-**API documentation**: `/site/api` — interactive Swagger UI documenting all public REST endpoints (`/api/wallet`, `/api/status`, `/api/currencies`, etc.).
+**API documentation**: `/site/api` — Swagger UI for all public REST endpoints (`/api/wallet`, `/api/status`, `/api/currencies`, etc.).
+
+---
+
+## UI layout themes
+
+The Yii2 interface supports three switchable layout schemes set via `YIIMP_LAYOUT` in `serverconfig.php`:
+
+| Scheme | Technology | Notes |
+|--------|-----------|-------|
+| `legacy` (default) | Bootstrap 5 + custom CSS | Original visual style |
+| `adminlte` | AdminLTE 4 + Bootstrap Icons | Modern sidebar layout |
+| `tailwind` | Tailwind CSS v3 + Lucide icons | Utility-first, dark-mode native |
+
+All three schemes share the same controllers, models, and view partials. The active-state nav highlight, dark-mode cookie persistence, and sidebar scroll position are handled per-scheme. Chart.js 4 is used for all graphs across all schemes (jqPlot has been removed).
+
+---
+
+## Exchange drivers
+
+The exchange system in `yiimp2/exchanges/` uses a driver-per-exchange architecture. Each driver extends `ExchangeDriver` and declares its capabilities (`supportsMarkets`, `supportsDiscover`, `supportsTrading`, `supportsBalance`).
+
+Active drivers: Binance, Bitstamp, CexIO, Exbitron, GateIO, HitBTC, KlingexIO, KuCoin, Kraken, Nestex, NonKYC, Poloniex, SafeTrade, Shapeshift, Yobit.
+
+Market names follow the `'exchange BASECOIN'` convention for non-BTC pairs (e.g. `'nonkyc USDT'`, `'klingex USDT'`).
 
 ---
 
 ## SSL / TLS (optional)
 
-The container includes HAProxy and Certbot (Let's Encrypt).
-
 ```bash
-# Initial certificate issuance
 make run-init-letsencrypt MAILADDRESS=admin@example.com DOMAINNAME=pool.example.com
 ```
 
-After a certificate is issued, enable HAProxy in `supervisord.conf` by setting `autostart=true` on the `[program:haproxy]` block and restart the container.
-
-HAProxy listens on port 443 for HTTPS and can also terminate TLS for stratum connections (port 25+ for SSL stratum, configurable in the HAProxy config).
+After certificate issuance, enable `[program:haproxy]` (`autostart=true`) in `supervisord.conf` and restart. HAProxy terminates TLS on port 443 and can also handle SSL stratum connections.
 
 ---
 
 ## Stratum configuration
 
-Each algorithm needs its own `.conf` file in `config/stratum/`. Minimal example (`config/stratum/x11.conf`):
+Each algorithm needs a `.conf` file in `config/stratum/`. Minimal example:
 
 ```ini
 [server]
 stratumhost = pool.example.com
 stratumport = 3533
 workername  = x11
-rpcpasswd   = stratumpassword   # must match YAAMP_STRATUM_PASSWD in serverconfig.php
+rpcpasswd   = stratumpassword
 
 [mysql]
-dbhost     = 127.0.0.1
-dbport     = 3306
-dbname     = yaamp
-dbuser     = yiimp_stratum
-dbpasswd   = your-stratum-db-password
+dbhost   = 127.0.0.1
+dbport   = 3306
+dbname   = yaamp
+dbuser   = yiimp_stratum
+dbpasswd = your-stratum-db-password
 ```
 
-Coin daemons should be configured to send block notifications to the stratum:
-
-```
-blocknotify=blocknotify pool.example.com:port coinid %s
-```
+Coin daemons: `blocknotify=blocknotify pool.example.com:port coinid %s`
 
 ---
 
 ## Database migrations
 
-New algorithm and schema changes are shipped as dated SQL files in `sql/`. Apply them in order after pulling:
-
 ```bash
 mysql -u root -p yaamp < sql/2026-03-29-add_algo_hoohash_pepew.sql
 ```
 
-Notable migration files:
-
 | File | Purpose |
 |------|---------|
 | `sql/2024-03-06-complete_export.sql.gz` | Base schema (import first) |
-| `sql/2026-05-22-add_queue_table.sql` | yii2-queue table for Yii2 background jobs |
-| `sql/2026-03-29-add_algo_hoohash_pepew.sql` | Latest algorithm addition (most recent) |
+| `sql/2026-05-22-add_queue_table.sql` | yii2-queue table |
+| `sql/2026-03-29-add_algo_hoohash_pepew.sql` | Latest algorithm addition |
 
 ---
 
@@ -331,23 +319,34 @@ Notable migration files:
 
 ```
 stratum/        C++ stratum server source
-web/            Yii 1.1 pool application (production)
-yiimp2/         Yii 2.0 application (admin, API, jobs — migration complete)
-  commands/     Console commands (CLI tools: coin, payout, user, graph, …)
-  components/   RPC clients (Bitcoin, Ethereum, Monero), utilities
-  controllers/  Web controllers
-  exchanges/    Exchange drivers (15 exchanges, native HTTP, no legacy globals)
+web/            Yii 1.1 pool application (legacy frontend)
+yiimp2/         Yii 2.0 application
+  assets/       Asset bundles (AppAsset, AdminLteAsset, TailwindAsset,
+                ChartAsset, TablesorterAsset)
+  commands/     Console commands (coin, payout, user, graph, …)
+  components/   RPC clients, LayoutManager, ViewUtils, ConversionUtils
+  controllers/  Web controllers (all extend BaseController for layout routing)
+  exchanges/    Exchange drivers (15 exchanges, driver-per-exchange pattern)
   jobs/         yii2-queue job classes (25 jobs across 7 domains)
   models/       ActiveRecord models
   services/     Backend service classes (payments, coins, stats, settings, …)
-  views/        PHP templates
-  start.sh      Start queue workers from a plain bash console
-  worker.sh     Single persistent queue worker (multi-terminal / custom PM)
-  serverconfig.sample.php  Yii2-only config reference (no YAAMP_ aliases)
+  src/          Tailwind CSS source (app.css entry point)
+  views/
+    layouts/    Per-scheme layout files + partials
+      legacy/   Bootstrap 5 layout (default)
+      adminlte/ AdminLTE 4 layout
+      tailwind/ Tailwind CSS layout
+  web/          Document root (CSS, JS, assets)
+    js/yiimp_charts.js  Chart.js wrapper (replaces jqPlot)
+  package.json  npm build (Tailwind CLI + AdminLTE)
+  start.sh      Start queue workers from bash console
+  worker.sh     Single persistent queue worker
+  serverconfig.sample.php  Yii2 config reference
 config/         Container config templates (supervisor, Apache, HAProxy)
 sql/            Database schema and incremental migration files
 bin/            CLI utilities (blocknotify, letsencrypt helpers)
 docs/           Technical planning documents
+  layout_scheme_implementation_plan.md
 ```
 
 ---

@@ -38,6 +38,7 @@ class MarketController extends BaseController
 
     public function actionUpdate(): mixed
     {
+        $this->requireAdmin();
         $market = Markets::findOne((int) Yii::$app->request->get('id'));
         if (!$market) {
             return $this->goHome();
@@ -56,6 +57,7 @@ class MarketController extends BaseController
 
     public function actionEnable(): mixed
     {
+        $this->requireAdmin();
         $market = Markets::findOne((int) Yii::$app->request->get('id'));
         if ($market) {
             $market->disabled = Yii::$app->request->get('en') ? 0 : 9;
@@ -66,6 +68,7 @@ class MarketController extends BaseController
 
     public function actionDelete(): mixed
     {
+        $this->requireAdmin();
         $market = Markets::findOne((int) Yii::$app->request->get('id'));
         if ($market) {
             $market->delete();
@@ -75,13 +78,19 @@ class MarketController extends BaseController
 
     public function actionSellto(): mixed
     {
+        $this->requireAdmin();
         $market = Markets::findOne((int) Yii::$app->request->get('id'));
         if (!$market) {
-            Yii::$app->session->setFlash('error', 'invalid market');
-            return $this->goBack();
+            Yii::$app->session->setFlash('error', 'Invalid market.');
+            return $this->redirect(Yii::$app->request->referrer ?: Yii::$app->homeUrl);
         }
 
-        $coin   = Coins::findOne($market->coinid);
+        $coin = Coins::findOne($market->coinid);
+        if (!$coin) {
+            Yii::$app->session->setFlash('error', 'Coin not found for this market.');
+            return $this->redirect(Yii::$app->request->referrer ?: Yii::$app->homeUrl);
+        }
+
         $amount = (float) Yii::$app->request->get('amount', 0);
 
         $remote = new WalletRPC($coin);
@@ -126,5 +135,13 @@ class MarketController extends BaseController
         }
 
         return $this->redirect(['/admin/coinwallet', 'id' => $coin->id]);
+    }
+
+    private function requireAdmin(): void
+    {
+        $identity = Yii::$app->user->identity;
+        if (!$identity || !$identity->is_admin) {
+            throw new \yii\web\ForbiddenHttpException();
+        }
     }
 }

@@ -19,19 +19,17 @@ var main_timeout;
 
 function main_ready(data) {
     $('#main_results').html(data);
+    if (typeof lucide !== 'undefined') lucide.createIcons();
     main_timeout = setTimeout(main_refresh, main_delay);
 }
-
 function main_error() {
     main_timeout = setTimeout(main_refresh, main_delay * 2);
 }
-
 function main_refresh() {
     clearTimeout(main_timeout);
     $('#main_results').css('min-height', ($(window).height() - 150) + 'px');
     $.get('<?= Yii::$app->homeUrl ?>admin/payments_results?id=<?= $coinId ?>', '', main_ready)
      .fail(main_error);
 }
-
-$(function() { main_refresh(); });
+$(function () { main_refresh(); });
 </script>

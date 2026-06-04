@@ -18,10 +18,12 @@ use app\models\Markets;
 use app\models\Mining;
 use app\models\Algos;
 use app\models\Bookmarks;
+use app\models\Notifications;
 use app\models\Orders;
 use app\models\Workers;
 use app\services\CoinService;
 use app\services\BlockService;
+use app\services\MarketService;
 use yii\helpers\ArrayHelper;
 
 class AdminController extends BaseController
@@ -517,12 +519,25 @@ class AdminController extends BaseController
 			'sort' => false,
 		]);
 
+		// Batch-load market names for all coins on this page
+		$coins   = $provider->models;
+		$coinIds = array_map(fn($c) => $c->id, $coins);
+		$marketsMap = [];
+		if ($coinIds) {
+			foreach (Markets::find()->select(['coinid', 'name'])
+				->where(['coinid' => $coinIds])->asArray()->all() as $row
+			) {
+				$marketsMap[$row['coinid']][] = $row['name'];
+			}
+		}
+
 		return $this->render('coinlist', [
 			'provider'       => $provider,
 			'totalInstalled' => (int) $totalInstalled,
 			'totalActive'    => (int) $totalActive,
 			'searchQuery'    => $search,
 			'pageSize'       => $pageSize,
+			'marketsMap'     => $marketsMap,
 		]);
 	}
 
@@ -596,6 +611,43 @@ class AdminController extends BaseController
 	{
 		return $this->render('coinwallet');
 	}
+
+    /**
+     * Uninstall a coin: wipe related data, disable the coin record.
+     * GET → confirmation page. POST → execute and redirect to coinwallets list.
+     * Ports: actionUninstallCoin (legacy).
+     */
+    public function actionUninstallcoin(): string|\yii\web\Response
+    {
+        $this->requireAdmin();
+        $id   = (int) Yii::$app->request->get('id');
+        $coin = Coins::findOne($id);
+        if (!$coin) {
+            Yii::$app->session->setFlash('error', 'Coin not found.');
+            return $this->redirectBack(['/admin/coinwallets']);
+        }
+
+        if (Yii::$app->request->isPost) {
+            $db = Yii::$app->db;
+            $db->createCommand('DELETE FROM exchange_deposit WHERE coinid = :id', [':id' => $id])->execute();
+            $db->createCommand('DELETE FROM earnings        WHERE coinid = :id', [':id' => $id])->execute();
+            $db->createCommand('DELETE FROM orders          WHERE coinid = :id', [':id' => $id])->execute();
+            $db->createCommand('DELETE FROM shares          WHERE coinid = :id', [':id' => $id])->execute();
+
+            $coin->enable        = false;
+            $coin->installed     = false;
+            $coin->auto_ready    = false;
+            $coin->master_wallet = null;
+            $coin->mint          = 0;
+            $coin->balance       = 0;
+            $coin->save();
+
+            Yii::$app->session->setFlash('success', "{$coin->symbol} has been uninstalled.");
+            return $this->redirect(['/admin/coinwallets']);
+        }
+
+        return $this->render('uninstallcoin_confirm', ['coin' => $coin]);
+    }
 
     public function actionCoinwallet_details()
 	{
@@ -704,15 +756,61 @@ class AdminController extends BaseController
 		]);
 	}
 
-	// called from the wallet
-	public function actionClearearnings()
+	/**
+	 * Markets for active coins that have no deposit address or carry an error message.
+	 * These need manual attention — either configure the deposit address or clear the error.
+	 */
+	public function actionEmptymarkets(): string
 	{
-		$coin = Coins::findOne(['id' => (int) Yii::$app->getRequest()->getQueryParam('id')]);
-		if ($coin) {
-			BackendClearEarnings($coin->id);
-		}
-		return $this->redirectBack();
+		$this->requireAdmin();
+
+		$rows = (new \yii\db\Query())
+			->select(['markets.id AS marketid', 'markets.coinid'])
+			->from('markets')
+			->leftJoin('coins', 'coins.id = markets.coinid')
+			->where(['coins.installed' => 1, 'coins.enable' => 1])
+			->andWhere(['or',
+				['markets.deposit_address' => null],
+				['markets.deposit_address' => ''],
+				['and',
+					['not', ['markets.message' => null]],
+					['<>', 'markets.message', ''],
+				],
+			])
+			->orderBy(['coins.id' => SORT_DESC, 'markets.id' => SORT_DESC])
+			->all();
+
+		$coinIds   = array_values(array_unique(array_column($rows, 'coinid')));
+		$marketIds = array_values(array_unique(array_column($rows, 'marketid')));
+
+		$coins   = $coinIds   ? Coins::find()->where(['id' => $coinIds])->indexBy('id')->all()     : [];
+		$markets = $marketIds ? Markets::find()->where(['id' => $marketIds])->indexBy('id')->all() : [];
+
+		return $this->render('emptymarkets', [
+			'rows'    => $rows,
+			'coins'   => $coins,
+			'markets' => $markets,
+		]);
 	}
+
+    /** Move matured earnings into user balances for a single coin. Ports: actionClearearnings (legacy). */
+    public function actionClearearnings(): \yii\web\Response
+    {
+        $this->requireAdmin();
+        $id   = (int) Yii::$app->request->get('id');
+        $coin = Coins::findOne($id);
+        if ($coin) {
+            try {
+                (new \app\services\PaymentService())->clearEarnings($coin->id);
+                Yii::$app->session->setFlash('success', "Earnings cleared for {$coin->symbol}.");
+            } catch (\Throwable $e) {
+                Yii::$app->session->setFlash('error', "Clear earnings failed for {$coin->symbol}: " . $e->getMessage());
+            }
+        } else {
+            Yii::$app->session->setFlash('error', 'Coin not found.');
+        }
+        return $this->redirectBack(['/admin/coinwallet', 'id' => $id]);
+    }
 
     /////////////////////////////////////////////////
     /* monsters — anomaly / high-activity user list */
@@ -1100,6 +1198,85 @@ class AdminController extends BaseController
 	}
 
     /////////////////////////////////////////////////
+
+    public function actionUpdateprice(): \yii\web\Response
+    {
+        $this->requireAdmin();
+        try {
+            $svc = new MarketService();
+            $svc->updatePrices();
+            Yii::$app->session->setFlash('success', 'Market prices updated successfully.');
+        } catch (\Throwable $e) {
+            Yii::$app->session->setFlash('error', 'Price update failed: ' . $e->getMessage());
+        }
+        return $this->redirectBack(['/admin/dashboard']);
+    }
+
+    /** Delete all earnings for a coin with a server-side confirmation step. Ports: actionDeleteEarnings (legacy). */
+    public function actionDeleteearnings(): string|\yii\web\Response
+    {
+        $this->requireAdmin();
+        $id   = (int) Yii::$app->request->get('id');
+        $coin = Coins::findOne($id);
+        if (!$coin) {
+            Yii::$app->session->setFlash('error', 'Coin not found.');
+            return $this->redirectBack(['/admin/coinwallets']);
+        }
+
+        if (Yii::$app->request->isPost) {
+            Yii::$app->db->createCommand(
+                'DELETE FROM earnings WHERE coinid = :id', [':id' => $coin->id]
+            )->execute();
+            Yii::$app->session->setFlash('success', "All earnings for {$coin->symbol} have been deleted.");
+            return $this->redirect(['/admin/coinwallet', 'id' => $coin->id]);
+        }
+
+        return $this->render('deleteearnings_confirm', ['coin' => $coin]);
+    }
+
+    /** Run full block update cycle for a single coin. Ports: actionCheckblocks (legacy). */
+    public function actionCheckblocks(): \yii\web\Response
+    {
+        $this->requireAdmin();
+        $id   = (int) Yii::$app->request->get('id');
+        $coin = Coins::findOne($id);
+        if ($coin) {
+            try {
+                $svc = new \app\services\BlockService();
+                $svc->processNewBlocks($id);
+                $svc->updateBlockConfirmations($id);
+                $svc->scanTransactions($id);
+                $svc->updatePoolBalances($id);
+                Yii::$app->session->setFlash('success', "Blocks updated for {$coin->symbol}.");
+            } catch (\Throwable $e) {
+                Yii::$app->session->setFlash('error', "Block update failed for {$coin->symbol}: " . $e->getMessage());
+            }
+        } else {
+            Yii::$app->session->setFlash('error', 'Coin not found.');
+        }
+        return $this->redirectBack(['/admin/coinwallet', 'id' => $id]);
+    }
+
+    /** Trigger on-demand payout for a single coin. Ports: actionPayuserscoin (legacy). */
+    public function actionPayuserscoin(): \yii\web\Response
+    {
+        $this->requireAdmin();
+        $id   = (int) Yii::$app->request->get('id');
+        $coin = Coins::findOne($id);
+        if ($coin) {
+            try {
+                (new \app\services\PaymentService())->payCoin($coin);
+                Yii::$app->session->setFlash('success', "Payments processed for {$coin->symbol}.");
+            } catch (\Throwable $e) {
+                Yii::$app->session->setFlash('error', "Payment failed for {$coin->symbol}: " . $e->getMessage());
+            }
+        } else {
+            Yii::$app->session->setFlash('error', 'Coin not found.');
+        }
+        return $this->redirectBack(['/admin/coinwallet', 'id' => $id]);
+    }
+
+    /////////////////////////////////////////////////
    	public function actionMemcached()
 	{
 		return $this->render('memcached');
@@ -1286,6 +1463,182 @@ class AdminController extends BaseController
 		}
 		return $this->redirectBack();
 	}
+
+    /** Interactive RPC console for a coin wallet. Ports: actionCoinConsole (legacy). */
+    public function actionCoinwalletConsole(): string|\yii\web\Response
+    {
+        $this->requireAdmin();
+        if (!defined('YIIMP_ADMIN_WEBCONSOLE') || !YIIMP_ADMIN_WEBCONSOLE) {
+            throw new \yii\web\ForbiddenHttpException('Web console is disabled.');
+        }
+
+        $id   = (int) Yii::$app->request->get('id');
+        $coin = Coins::findOne($id);
+        if (!$coin) {
+            return $this->redirectBack(['/admin/coinwallets']);
+        }
+
+        $remote = new \app\components\rpc\WalletRPC($coin);
+        $info   = $remote->error === null ? $remote->getinfo() : false;
+
+        $query  = '';
+        $result = null;
+        $rpcErr = null;
+
+        if (Yii::$app->request->isPost) {
+            $query = trim(Yii::$app->request->post('query', ''));
+            if ($query !== '') {
+                $result = $remote->execute($query);
+                if ($result === false) {
+                    $rpcErr = $remote->error;
+                    $result = null;
+                }
+                Yii::info("{$coin->symbol} CONSOLE {$query}", __CLASS__);
+            }
+        }
+
+        return $this->render('coinwallet_console', [
+            'coin'   => $coin,
+            'info'   => $info,
+            'query'  => $query,
+            'result' => $result,
+            'rpcErr' => $rpcErr,
+        ]);
+    }
+
+    /** Signal the daemon to stop: disable coin, clear connections. Ports: actionStopCoin (legacy). */
+    public function actionStopcoin(): \yii\web\Response
+    {
+        $this->requireAdmin();
+        $id   = (int) Yii::$app->request->get('id');
+        $coin = Coins::findOne($id);
+        if ($coin) {
+            $coin->action      = 2;
+            $coin->enable      = false;
+            $coin->auto_ready  = false;
+            $coin->connections = 0;
+            $coin->save();
+        }
+        return $this->redirectBack(['/admin/coinwallet', 'id' => $id]);
+    }
+
+    /////////////////////////////////////////////////
+    /* coinwallet auto_ready toggle */
+
+    public function actionCoinwalletSetauto(): \yii\web\Response
+    {
+        $this->requireAdmin();
+        $id   = (int) Yii::$app->request->get('id');
+        $coin = Coins::findOne($id);
+        if ($coin) {
+            $coin->auto_ready = true;
+            $coin->save();
+        }
+        return $this->redirectBack(['/admin/coinwallet', 'id' => $id]);
+    }
+
+    public function actionCoinwalletUnsetauto(): \yii\web\Response
+    {
+        $this->requireAdmin();
+        $id   = (int) Yii::$app->request->get('id');
+        $coin = Coins::findOne($id);
+        if ($coin) {
+            $coin->auto_ready = false;
+            $coin->save();
+        }
+        return $this->redirectBack(['/admin/coinwallet', 'id' => $id]);
+    }
+
+    /////////////////////////////////////////////////
+    /* coin triggers (notification rules) */
+
+    public function actionCointriggers(): string|\yii\web\Response
+    {
+        $this->requireAdmin();
+        $id   = (int) Yii::$app->request->get('id');
+        $coin = Coins::findOne($id);
+        if (!$coin) {
+            return $this->redirectBack(['/admin/coinwallets']);
+        }
+
+        $remote        = new \app\components\rpc\WalletRPC($coin);
+        $info          = $remote->error === null ? $remote->getinfo() : false;
+        $notifications = Notifications::find()->where(['idcoin' => $coin->id])->all();
+
+        return $this->render('cointriggers', [
+            'coin'          => $coin,
+            'info'          => $info,
+            'notifications' => $notifications,
+        ]);
+    }
+
+    public function actionCointriggerEnable(): \yii\web\Response
+    {
+        $this->requireAdmin();
+        $rule = Notifications::findOne((int) Yii::$app->request->get('id'));
+        if ($rule) {
+            $rule->enabled = (int) Yii::$app->request->get('en', 0);
+            $rule->save();
+        }
+        return $this->redirectBack(['/admin/cointriggers']);
+    }
+
+    public function actionCointriggerReset(): \yii\web\Response
+    {
+        $this->requireAdmin();
+        $rule = Notifications::findOne((int) Yii::$app->request->get('id'));
+        if ($rule) {
+            $rule->lasttriggered = 0;
+            $rule->save();
+        }
+        return $this->redirectBack(['/admin/cointriggers']);
+    }
+
+    public function actionCointriggerDel(): \yii\web\Response
+    {
+        $this->requireAdmin();
+        $rule = Notifications::findOne((int) Yii::$app->request->get('id'));
+        if ($rule) {
+            $rule->delete();
+        }
+        return $this->redirectBack(['/admin/cointriggers']);
+    }
+
+    public function actionCointriggerAdd(): \yii\web\Response
+    {
+        $this->requireAdmin();
+        if (!Yii::$app->request->isPost) {
+            return $this->redirectBack();
+        }
+
+        $id   = (int) Yii::$app->request->get('id');
+        $coin = Coins::findOne($id);
+        if (!$coin) {
+            return $this->redirectBack(['/admin/coinwallets']);
+        }
+
+        $post          = Yii::$app->request->post();
+        $conditionType = trim($post['conditiontype'] ?? '');
+
+        if (count(explode(' ', $conditionType)) < 2) {
+            Yii::$app->session->setFlash('error', "Missing space in condition — example: 'balance <' 5");
+            return $this->redirect(['/admin/cointriggers', 'id' => $id]);
+        }
+
+        $rule                 = new Notifications();
+        $rule->idcoin         = $coin->id;
+        $rule->notifytype     = $post['notifytype']     ?? 'email';
+        $rule->conditiontype  = $conditionType;
+        $rule->conditionvalue = (float) ($post['conditionvalue'] ?? 0);
+        $rule->notifycmd      = trim($post['notifycmd']    ?? '');
+        $rule->description    = trim($post['description'] ?? '');
+        $rule->enabled        = 1;
+        $rule->lastchecked    = 0;
+        $rule->lasttriggered  = 0;
+        $rule->save();
+
+        return $this->redirect(['/admin/cointriggers', 'id' => $id]);
+    }
 
 	/////////////////////////////////////////////////
 

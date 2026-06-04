@@ -392,9 +392,188 @@ class SiteController extends BaseController
      *
      * @return string
      */
-    public function actionMiners()
+    public function actionMiners(): string
 	{
 		return $this->render('miners');
+	}
+
+	public function actionMiners_results(): string
+	{
+		$algo     = Yii::$app->session->get('yaamp-algo', '');
+		$isAdmin  = !is_null(Yii::$app->user->identity) && Yii::$app->user->identity->is_admin;
+		$util     = Yii::$app->YiimpUtils;
+		$conv     = Yii::$app->ConversionUtils;
+		$cache    = Yii::$app->cache;
+		$db       = Yii::$app->db;
+
+		$algoFactor = $util->algo_mBTC_factor($algo);
+		$algoUnit   = match (true) {
+			$algoFactor == 0.001      => 'Kh',
+			$algoFactor == 1000       => 'Gh',
+			$algoFactor == 1000000    => 'Th',
+			$algoFactor == 1000000000 => 'Ph',
+			default                   => 'Mh',
+		};
+
+		$target   = $util->hashrate_constant($algo);
+		$interval = $util->hashrate_step();
+		$delay    = time() - $interval;
+
+		// ── Totals ────────────────────────────────────────────────────────────
+		$totalWorkers    = (int) (new \yii\db\Query())->from('workers')->where(['algo' => $algo])->count();
+		$totalExtranonce = (int) (new \yii\db\Query())->from('workers')->where(['algo' => $algo, 'subscribe' => 1])->count();
+
+		$totalHashrate = (float) $cache->getOrSet("current_hashrate-{$algo}", function () use ($db, $algo) {
+			return $db->createCommand(
+				"SELECT hashrate FROM hashrate WHERE algo=:a ORDER BY time DESC LIMIT 1",
+				[':a' => $algo]
+			)->queryScalar() ?: 0.0;
+		}, 60);
+
+		$totalInvalid = 0.0;
+		if ($isAdmin) {
+			$totalInvalid = (float) $cache->getOrSet("current_hashrate_bad-{$algo}", function () use ($db, $algo) {
+				return $db->createCommand(
+					"SELECT hashrate_bad FROM hashrate WHERE algo=:a ORDER BY time DESC LIMIT 1",
+					[':a' => $algo]
+				)->queryScalar() ?: 0.0;
+			}, 60);
+		}
+
+		// ── Per-version worker counts ─────────────────────────────────────────
+		$versionCounts = $db->createCommand(
+			"SELECT version, COUNT(*) AS c, SUM(subscribe) AS s FROM workers WHERE algo=:a GROUP BY version ORDER BY c DESC",
+			[':a' => $algo]
+		)->queryAll();
+
+		// ── Batch hashrate + invalid from shares (1 query instead of 2×N) ─────
+		$versionRates = $cache->getOrSet("miners-rates-{$algo}", function () use ($db, $target, $interval, $delay, $algo) {
+			$rows = $db->createCommand(
+				"SELECT w.version,
+				        SUM(CASE WHEN s.valid=1 THEN s.difficulty ELSE 0 END) * :t / :iv / 1000 AS hashrate,
+				        SUM(CASE WHEN s.valid=0 THEN s.difficulty ELSE 0 END) * :t / :iv / 1000 AS invalid
+				 FROM shares s JOIN workers w ON w.id=s.workerid
+				 WHERE s.time>:delay AND w.algo=:algo
+				 GROUP BY w.version",
+				[':t' => $target, ':iv' => $interval, ':delay' => $delay, ':algo' => $algo]
+			)->queryAll();
+			$map = [];
+			foreach ($rows as $r) {
+				$map[$r['version']] = ['hashrate' => (float)$r['hashrate'], 'invalid' => (float)$r['invalid']];
+			}
+			return $map;
+		}, 60);
+
+		// ── Batch donators per version (1 query instead of N) ────────────────
+		$versionDonators = [];
+		foreach ($db->createCommand(
+			"SELECT w.version, COUNT(*) AS d FROM workers w
+			 LEFT JOIN accounts a ON a.id=w.userid
+			 WHERE w.algo=:a AND a.donation>0 GROUP BY w.version",
+			[':a' => $algo]
+		)->queryAll() as $r) {
+			$versionDonators[$r['version']] = (int) $r['d'];
+		}
+
+		// ── Batch error breakdown per version (admin only, 1 query instead of 8×N)
+		$errorTab = [
+			20 => 'Invalid nonce size',   21 => 'Invalid job id',
+			22 => 'Duplicate share',      23 => 'Invalid time rolling',
+			24 => 'Invalid extranonce2 size', 25 => 'Invalid share',
+			26 => 'Low difficulty share', 27 => 'Invalid extranonce',
+		];
+		$versionErrors = [];
+		if ($isAdmin) {
+			foreach ($db->createCommand(
+				"SELECT w.version, s.error, SUM(s.difficulty) * :t / :iv / 1000 AS bad
+				 FROM shares s JOIN workers w ON w.id=s.workerid
+				 WHERE s.time>:delay AND w.algo=:algo AND s.valid=0 AND s.error>0
+				 GROUP BY w.version, s.error",
+				[':t' => $target, ':iv' => $interval, ':delay' => $delay, ':algo' => $algo]
+			)->queryAll() as $r) {
+				$versionErrors[$r['version']][(int)$r['error']] = (float)$r['bad'];
+			}
+		}
+
+		// ── Assemble per-version display data ────────────────────────────────
+		$totalDonators = 0;
+		$versionData   = [];
+
+		foreach ($versionCounts as $item) {
+			$version    = $item['version'];
+			$count      = (int) $item['c'];
+			$extranonce = (int) $item['s'];
+			$rates      = $versionRates[$version] ?? ['hashrate' => 0.0, 'invalid' => 0.0];
+			$hashrate   = $rates['hashrate'];
+			$invalid    = $rates['invalid'];
+			$donators   = $versionDonators[$version] ?? 0;
+
+			if (!$hashrate && !$isAdmin) continue;
+
+			$totalDonators += $donators;
+
+			$errorTitle = '';
+			if ($isAdmin && isset($versionErrors[$version])) {
+				foreach ($versionErrors[$version] as $code => $bad) {
+					if ($bad && ($hashrate + $invalid)) {
+						$pct         = round($bad * 100 / ($hashrate + $invalid), 2);
+						$errorTitle .= "{$pct}% — " . ($errorTab[$code] ?? "Error {$code}") . "\n";
+					}
+				}
+			}
+
+			$percent = ($totalHashrate && $hashrate) ? round($hashrate * 100 / $totalHashrate, 2) . '%' : '-';
+			if ($percent === '0%') $percent = '-';
+			$bad = ($hashrate + $invalid) ? round($invalid * 100 / ($hashrate + $invalid), 1) . '%' : '-';
+			$avg = $count ? $conv->Itoa2($hashrate / $count) . 'H/s' : '';
+
+			$versionData[] = [
+				'version'    => substr($version, 0, 30),
+				'count'      => $count,
+				'extranonce' => $extranonce,
+				'hashrate'   => $hashrate ? $conv->Itoa2($hashrate) . 'H/s' : '',
+				'donators'   => $donators,
+				'percent'    => $percent,
+				'bad'        => $bad,
+				'avg'        => $avg,
+				'errorTitle' => $errorTitle,
+			];
+		}
+
+		// ── Total row ─────────────────────────────────────────────────────────
+		$totalErrorTitle = '';
+		if ($isAdmin) {
+			$aggErrors = [];
+			foreach ($versionErrors as $verErrors) {
+				foreach ($verErrors as $code => $bad) {
+					$aggErrors[$code] = ($aggErrors[$code] ?? 0.0) + $bad;
+				}
+			}
+			foreach ($aggErrors as $code => $bad) {
+				if ($bad && ($totalHashrate + $totalInvalid)) {
+					$pct              = round($bad * 100 / ($totalHashrate + $totalInvalid), 2);
+					$totalErrorTitle .= "{$pct}% — " . ($errorTab[$code] ?? "Error {$code}") . "\n";
+				}
+			}
+		}
+
+		$totalBad = ($totalHashrate + $totalInvalid) && $totalInvalid
+			? round($totalInvalid * 100 / ($totalHashrate + $totalInvalid), 1) . '%' : '';
+		$totalAvg = $totalWorkers ? $conv->Itoa2($totalHashrate / $totalWorkers) . 'H/s' : '';
+
+		return $this->renderPartial('results/miners_results', [
+			'algo'             => $algo,
+			'algoUnit'         => $algoUnit,
+			'isAdmin'          => $isAdmin,
+			'totalWorkers'     => $totalWorkers,
+			'totalExtranonce'  => $totalExtranonce,
+			'totalHashrateFmt' => $conv->Itoa2($totalHashrate) . 'H/s',
+			'totalDonators'    => $totalDonators,
+			'totalBad'         => $totalBad,
+			'totalAvg'         => $totalAvg,
+			'totalErrorTitle'  => $totalErrorTitle,
+			'versionData'      => $versionData,
+		]);
 	}
 
     // Home Tab : Pool Stats (algo) on the bottom right

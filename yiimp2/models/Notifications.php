@@ -8,6 +8,6 @@ class Notifications extends ActiveRecord
 {
     public function getCoin(): \yii\db\ActiveQuery
     {
-        return $this->hasOne(Coins::class, ['id' => 'coinid']);
+        return $this->hasOne(Coins::class, ['id' => 'idcoin']);
     }
 }

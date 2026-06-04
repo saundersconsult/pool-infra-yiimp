@@ -19,10 +19,10 @@ $btn = fn(string $label, string $url, string $color = 'indigo') =>
 <div class="flex flex-wrap gap-1.5 mb-3">
     <?= $btn('Properties', '/admin/coinwallet_update?id=' . $coin->id) ?>
     <?php if ($info): ?>
-        <?= $coin->createExplorerLink(Html::tag('span', 'Explorer')) ?>
-        <?= $btn('Peers',    '/admin/coinwallet_peers?id='   . $coin->id) ?>
+        <?= $btn('Explorer', '/explorer/' . $coin->getOfficialSymbol() . '?id=' . $coin->id) ?>
+        <?= $btn('Peers',    '/admin/coinpeers?id='   . $coin->id) ?>
         <?php if (YIIMP_ADMIN_WEBCONSOLE): ?>
-            <?= $btn('Console', '/admin/coinwallet_console?id=' . $coin->id) ?>
+            <?= $btn('Console', '/admin/coinwallet-console?id=' . $coin->id) ?>
         <?php endif ?>
         <?= $btn('Triggers', '/admin/cointriggers?id=' . $coin->id) ?>
         <?php if ($src !== 'wallet'): ?>
@@ -33,13 +33,27 @@ $btn = fn(string $label, string $url, string $color = 'indigo') =>
         <?= $btn('Stop coind', '/admin/stopcoin?id=' . $coin->id, 'red') ?>
     <?php endif ?>
     <?= $coin->auto_ready
-        ? $btn('Unset auto', '/admin/coinwallet_unsetauto?id=' . $coin->id, 'yellow')
-        : $btn('Set auto',   '/admin/coinwallet_setauto?id='   . $coin->id, 'green') ?>
+        ? $btn('Unset auto', '/admin/coinwallet-unsetauto?id=' . $coin->id, 'yellow')
+        : $btn('Set auto',   '/admin/coinwallet-setauto?id='   . $coin->id, 'green') ?>
 </div>
-<div class="flex gap-3 text-xs text-gray-500 dark:text-gray-400 mb-3">
-    <?php if (!empty($coin->link_bitcointalk)): ?><?= Html::a('forum',  $coin->link_bitcointalk, ['target' => '_blank', 'class' => 'hover:text-indigo-500']) ?><?php endif ?>
-    <?php if (!empty($coin->link_github)):      ?><?= Html::a('git',    $coin->link_github,      ['target' => '_blank', 'class' => 'hover:text-indigo-500']) ?><?php endif ?>
-    <?php if (!empty($coin->link_site)):        ?><?= Html::a('site',   $coin->link_site,        ['target' => '_blank', 'class' => 'hover:text-indigo-500']) ?><?php endif ?>
-    <?php if (!empty($coin->link_explorer)):    ?><?= Html::a('chain',  $coin->link_explorer,    ['target' => '_blank', 'class' => 'hover:text-indigo-500', 'title' => 'External Blockchain Explorer']) ?><?php endif ?>
-    <?= Html::a('google', 'http://google.com/search?q=' . urlencode($coin->name . ' ' . $coin->symbol . ' bitcointalk'), ['target' => '_blank', 'class' => 'hover:text-indigo-500']) ?>
+<?php
+$extLinks = [];
+if (!empty($coin->link_bitcointalk)) $extLinks[] = ['Forum',  $coin->link_bitcointalk, 'message-circle',  'BitcoinTalk Forum'];
+if (!empty($coin->link_github))      $extLinks[] = ['GitHub', $coin->link_github,      'github',          'GitHub Repository'];
+if (!empty($coin->link_site))        $extLinks[] = ['Site',   $coin->link_site,        'globe',           'Official Website'];
+if (!empty($coin->link_explorer))    $extLinks[] = ['Chain',  $coin->link_explorer,    'link',            'External Explorer'];
+$extLinks[] = ['Search', 'http://google.com/search?q=' . urlencode($coin->name . ' ' . $coin->symbol . ' bitcointalk'), 'search', 'Google Search'];
+?>
+<div class="flex flex-wrap gap-1.5 mb-3">
+<?php foreach ($extLinks as [$label, $url, $icon, $title]): ?>
+    <?= Html::a(
+        '<i data-lucide="' . $icon . '" class="w-3 h-3 me-1 inline-block align-[-1px]"></i>' . Html::encode($label),
+        $url,
+        ['class' => 'inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium
+                     bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300
+                     hover:bg-gray-200 dark:hover:bg-gray-600
+                     border border-gray-200 dark:border-gray-600 transition-colors',
+         'target' => '_blank', 'title' => $title]
+    ) ?>
+<?php endforeach ?>
 </div>

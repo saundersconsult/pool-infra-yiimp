@@ -19,9 +19,7 @@ class AppAsset extends AssetBundle
         'css/jquery-ui.css',
         'css/uni-form.css'
     ];
-    public $js = [
-        'js/yiimp_charts.js',
-    ];
+    public $js = [];
     public $depends = [
         'yii\web\YiiAsset',
         'yii\bootstrap5\BootstrapAsset',

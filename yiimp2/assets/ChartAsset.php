@@ -21,8 +21,11 @@ use yii\web\AssetBundle;
  */
 class ChartAsset extends AssetBundle
 {
-    public $js      = [
+    public $basePath = '@webroot';
+    public $baseUrl  = '@web';
+    public $js       = [
         'https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js',
+        'js/yiimp_charts.js',
     ];
-    public $depends = ['yii\web\YiiAsset'];
+    public $depends  = ['yii\web\YiiAsset'];
 }
