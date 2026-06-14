@@ -7,7 +7,9 @@ use yii\filters\AccessControl;
 use yii\web\Response;
 use yii\filters\VerbFilter;
 
+use app\models\Accounts;
 use app\models\Algos;
+use app\models\Blocks;
 use app\models\Coins;
 
 class SiteController extends BaseController
@@ -671,13 +673,38 @@ class SiteController extends BaseController
 
 	public function actionBlock()
 	{
-		return $this->render('block');
-		
+		$id   = (int) Yii::$app->request->get('id');
+		$coin = $id ? Coins::findOne($id) : null;
+		return $this->render('block', ['coin' => $coin, 'id' => $id]);
 	}
 
 	public function actionBlock_results()
 	{
-		return $this->renderPartial('block_results');
+		$id     = (int) Yii::$app->request->get('id');
+		$coin   = Coins::findOne($id);
+		$blocks = [];
+		$accounts = [];
+
+		if ($coin) {
+			$isAdmin = !Yii::$app->user->isGuest && (Yii::$app->user->identity->is_admin ?? false);
+
+			$query = Blocks::find()->where(['coin_id' => $id])->orderBy('time DESC')->limit(250);
+			if (!$isAdmin) {
+				$query->andWhere(['not in', 'category', ['stake', 'generated']]);
+			}
+			$blocks = $query->all();
+
+			$userIds  = array_values(array_unique(array_filter(array_map(fn($b) => $b->userid, $blocks))));
+			$accounts = $userIds
+				? Accounts::find()->where(['id' => $userIds])->indexBy('id')->all()
+				: [];
+		}
+
+		return $this->renderPartial('block_results', [
+			'coin'     => $coin,
+			'blocks'   => $blocks,
+			'accounts' => $accounts,
+		]);
 	}
 
 	//////////////////////////////////////////////////////////////////////////////////////

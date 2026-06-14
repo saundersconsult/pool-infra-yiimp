@@ -96,7 +96,7 @@ class AdminController extends BaseController
 
         $model = new LoginForm();
         if ($model->load(Yii::$app->request->post()) && $model->login()) {
-            return $this->goBack();
+            return $this->goBack(['/admin/dashboard']);
         }
 
         $model->password = '';
@@ -667,21 +667,20 @@ class AdminController extends BaseController
 
 	public function actionCoinwallet_create()
 	{
-		$coin = new db_coins;
-		$coin->txmessage = true;
-		$coin->created = time();
-		$coin->index_avg = 1;
+		$coin             = new Coins();
+		$coin->txmessage  = true;
+		$coin->created    = time();
+		$coin->index_avg  = 1;
 		$coin->difficulty = 1;
-		$coin->installed = 1;
-		$coin->visible = 1;
+		$coin->installed  = 1;
+		$coin->visible    = 1;
+		$coin->lastblock  = '';
 
-		$coin->lastblock = '';
-
-		if(isset($_POST['Coins']))
-		{
-			$coin->setAttributes($_POST['Coins'], false);
-			if($coin->validate() && $coin->save())
-				return $this->redirect(array('coinwallets'));
+		if (Yii::$app->request->isPost) {
+			$coin->setAttributes(Yii::$app->request->post('Coins', []), false);
+			if ($coin->validate() && $coin->save()) {
+				return $this->redirect(['/admin/coinwallets']);
+			}
 		}
 
 		$algos = ArrayHelper::map(Algos::find()->all(), 'name', 'name');
@@ -1175,6 +1174,20 @@ class AdminController extends BaseController
 			'coins'        => $coins,
 		]);
 	}
+
+    /** Soft-delete an exchange deposit: mark as deleted, zero price, set receive time. */
+    public function actionDeleteexchangedeposit(): \yii\web\Response
+    {
+        $this->requireAdmin();
+        $deposit = \app\models\Exchange_deposit::findOne((int) Yii::$app->request->get('id'));
+        if ($deposit) {
+            $deposit->status       = 'deleted';
+            $deposit->price        = 0;
+            $deposit->receive_time = time();
+            $deposit->save();
+        }
+        return $this->redirectBack(['/admin/exchange']);
+    }
 
 	public function actionClearmarket()
 	{

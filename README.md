@@ -87,7 +87,13 @@ mysql -u root -p yaamp < sql/2026-05-22-add_queue_table.sql
 
 ```bash
 mkdir -p ./config ./log
+```
+
+Copy and edit the templates:
+
+```bash
 cp web/serverconfig.sample.php config/serverconfig.php
+cp config/supervisord.conf config/supervisord.conf   # already a template
 ```
 
 ### 2. `config/serverconfig.php` — key settings
@@ -137,9 +143,9 @@ define('YIIMP_PRODUCTION',     true);
 
 // NiceHash v2 (optional — pool buys hash power from NiceHash)
 // define('YIIMP_USE_NICEHASH_API', true);
-// define('NICEHASH_API_KEY',       'uuid-key');
-// define('NICEHASH_API_SECRET',    'hmac-secret');
-// define('NICEHASH_ORG_ID',        'uuid-org');
+// define('NICEHASH_API_KEY',       'uuid-key');       // API key UUID
+// define('NICEHASH_API_SECRET',    'hmac-secret');    // signing secret
+// define('NICEHASH_ORG_ID',        'uuid-org');       // organisation UUID
 ```
 
 Full reference: `yiimp2/serverconfig.sample.php`.
@@ -161,7 +167,7 @@ autorestart=true
 user=root
 ```
 
-Stratum config files go in `config/stratum/`.
+Stratum config files go in `config/stratum/`. Use `config/stratum/scrypt.conf` as a template.
 
 ---
 
@@ -188,18 +194,26 @@ podman run -dt --name=yiimp --network=host \
 make run-devel
 ```
 
-Mounts local source directories into the container — changes take effect without a rebuild.
+This mounts the local source directories into the container so changes take effect immediately without a rebuild.
 
 ---
 
 ## Supervisor management
 
-Supervisor web UI: **http://localhost:8900** (credentials: `yiimp` / `supervisor`).
+The supervisor web UI is available at **http://localhost:8900** (credentials: `yiimp` / `supervisor` by default — change in `supervisord.conf`).
+
+From the command line inside the container:
 
 ```bash
 supervisorctl -u yiimp -p supervisor -s http://127.0.0.1:8900 status
 supervisorctl -u yiimp -p supervisor -s http://127.0.0.1:8900 start stratum-x11
 supervisorctl -u yiimp -p supervisor -s http://127.0.0.1:8900 stop  stratum-x11
+```
+
+Or from the host if the container uses `--network=host`:
+
+```bash
+supervisorctl -u yiimp -p supervisor -s http://127.0.0.1:8900 status
 ```
 
 ---
@@ -238,7 +252,7 @@ The admin **Jobs dashboard** at `/jobs` shows live status for all 25 jobs with p
 | `http://host:8090/` | Yii2 frontend (admin, stats, wallet, API) |
 | `http://host:8900/` | Supervisord web UI |
 
-**Admin**: navigate to `/admin` and enter `YIIMP_ADMIN_USER` / `YIIMP_ADMIN_PASS`.
+**Admin login**: navigate to `/admin` and enter the credentials from `YIIMP_ADMIN_USER` / `YIIMP_ADMIN_PASS` in `serverconfig.php`.
 
 **API documentation**: `/site/api` — Swagger UI for all public REST endpoints (`/api/wallet`, `/api/status`, `/api/currencies`, etc.).
 
@@ -270,11 +284,16 @@ Market names follow the `'exchange BASECOIN'` convention for non-BTC pairs (e.g.
 
 ## SSL / TLS (optional)
 
+The container includes HAProxy and Certbot (Let's Encrypt).
+
 ```bash
+# Initial certificate issuance
 make run-init-letsencrypt MAILADDRESS=admin@example.com DOMAINNAME=pool.example.com
 ```
 
-After certificate issuance, enable `[program:haproxy]` (`autostart=true`) in `supervisord.conf` and restart. HAProxy terminates TLS on port 443 and can also handle SSL stratum connections.
+After a certificate is issued, enable HAProxy in `supervisord.conf` by setting `autostart=true` on the `[program:haproxy]` block and restart the container.
+
+HAProxy listens on port 443 for HTTPS and can also terminate TLS for stratum connections (port 25+ for SSL stratum, configurable in the HAProxy config).
 
 ---
 
@@ -297,21 +316,29 @@ dbuser   = yiimp_stratum
 dbpasswd = your-stratum-db-password
 ```
 
-Coin daemons: `blocknotify=blocknotify pool.example.com:port coinid %s`
+Coin daemons should be configured to send block notifications to the stratum:
+
+```
+blocknotify=blocknotify pool.example.com:port coinid %s
+```
 
 ---
 
 ## Database migrations
 
+New algorithm and schema changes are shipped as dated SQL files in `sql/`. Apply them in order after pulling:
+
 ```bash
 mysql -u root -p yaamp < sql/2026-03-29-add_algo_hoohash_pepew.sql
 ```
 
+Notable migration files:
+
 | File | Purpose |
 |------|---------|
 | `sql/2024-03-06-complete_export.sql.gz` | Base schema (import first) |
-| `sql/2026-05-22-add_queue_table.sql` | yii2-queue table |
-| `sql/2026-03-29-add_algo_hoohash_pepew.sql` | Latest algorithm addition |
+| `sql/2026-05-22-add_queue_table.sql` | yii2-queue table for Yii2 background jobs |
+| `sql/2026-03-29-add_algo_hoohash_pepew.sql` | Latest algorithm addition (most recent) |
 
 ---
 

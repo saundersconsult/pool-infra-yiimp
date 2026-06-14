@@ -129,11 +129,6 @@ $tab_general =
     CUFHtml::openActiveCtrlHolder($coin, 'errors').
     CUFHtml::activeLabelEx($coin, 'errors').
     CUFHtml::activeTextField($coin, 'errors', ['maxlength' => 200, 'readonly' => 'readonly', 'style' => 'width:600px;']).
-    CUFHtml::closeCtrlHolder().
-
-    CUFHtml::openActiveCtrlHolder($coin, 'specifications').
-    CUFHtml::activeLabelEx($coin, 'specifications').
-    CUFHtml::activeTextArea($coin, 'specifications', ['maxlength' => 2048, 'rows' => 5, 'class' => 'tweetnews-input', 'style' => 'width:600px;']).
     CUFHtml::closeCtrlHolder();
 
 $tab_settings =
@@ -209,6 +204,18 @@ $tab_settings =
     '<p class="formHint2"></p>'.
     CUFHtml::closeCtrlHolder().
 
+    CUFHtml::openActiveCtrlHolder($coin, 'usemweb').
+    CUFHtml::activeLabelEx($coin, 'usemweb').
+    CUFHtml::activeCheckBox($coin, 'usemweb', ['label' => '']).
+    '<p class="formHint2"></p>'.
+    CUFHtml::closeCtrlHolder().
+
+    CUFHtml::openActiveCtrlHolder($coin, 'enable_rpcdebug').
+    CUFHtml::activeLabelEx($coin, 'enable_rpcdebug').
+    CUFHtml::activeCheckBox($coin, 'enable_rpcdebug', ['label' => '']).
+    '<p class="formHint2">Debug RPC communication from stratum to wallet</p>'.
+    CUFHtml::closeCtrlHolder().
+
     CUFHtml::openActiveCtrlHolder($coin, 'reward_mul').
     CUFHtml::activeLabelEx($coin, 'reward_mul').
     CUFHtml::activeTextField($coin, 'reward_mul', ['maxlength' => 200, 'style' => 'width:120px;']).
@@ -221,11 +228,194 @@ $tab_settings =
     '<p class="formHint2">The pool wallet address</p>'.
     CUFHtml::closeCtrlHolder().
 
+    CUFHtml::openActiveCtrlHolder($coin, 'wallet_zaddress').
+    CUFHtml::activeLabelEx($coin, 'wallet_zaddress').
+    CUFHtml::activeTextField($coin, 'wallet_zaddress', ['maxlength' => 200]).
+    '<p class="formHint2">z-address for privacy coins (Zcash)</p>'.
+    CUFHtml::closeCtrlHolder().
+
     CUFHtml::openActiveCtrlHolder($coin, 'max_miners').
     CUFHtml::activeLabelEx($coin, 'max_miners').
     CUFHtml::activeTextField($coin, 'max_miners', ['maxlength' => 32, 'style' => 'width:120px;']).
     '<p class="formHint2">Miners allowed by the stratum</p>'.
+    CUFHtml::closeCtrlHolder().
+
+    CUFHtml::openActiveCtrlHolder($coin, 'max_shares').
+    CUFHtml::activeLabelEx($coin, 'max_shares').
+    CUFHtml::activeTextField($coin, 'max_shares', ['maxlength' => 32, 'style' => 'width:120px;']).
+    '<p class="formHint2">Auto restart stratum after this many shares</p>'.
+    CUFHtml::closeCtrlHolder().
+
+    CUFHtml::openActiveCtrlHolder($coin, 'personalization').
+    CUFHtml::activeLabelEx($coin, 'personalization').
+    CUFHtml::activeTextField($coin, 'personalization', ['maxlength' => 100]).
+    '<p class="formHint2">Equihash personalization string (default "ZcashPoW")</p>'.
+    CUFHtml::closeCtrlHolder().
+
+    CUFHtml::openActiveCtrlHolder($coin, 'charity_percent').
+    CUFHtml::activeLabelEx($coin, 'charity_percent').
+    CUFHtml::activeTextField($coin, 'charity_percent', ['maxlength' => 10, 'style' => 'width:60px;']).
+    '<p class="formHint2">Dev/foundation fee (1–10%)</p>'.
+    CUFHtml::closeCtrlHolder().
+
+    CUFHtml::openActiveCtrlHolder($coin, 'charity_address').
+    CUFHtml::activeLabelEx($coin, 'charity_address').
+    CUFHtml::activeTextField($coin, 'charity_address', ['maxlength' => 200]).
+    '<p class="formHint2">Foundation address if dev fees required</p>'.
     CUFHtml::closeCtrlHolder();
+
+$tab_daemon =
+    CUFHtml::openActiveCtrlHolder($coin, 'program').
+    CUFHtml::activeLabelEx($coin, 'program').
+    CUFHtml::activeTextField($coin, 'program', ['maxlength' => 128, 'style' => 'width:180px;']).
+    '<p class="formHint2">Daemon process name</p>'.
+    CUFHtml::closeCtrlHolder().
+
+    CUFHtml::openActiveCtrlHolder($coin, 'conf_folder').
+    CUFHtml::activeLabelEx($coin, 'conf_folder').
+    CUFHtml::activeTextField($coin, 'conf_folder', ['maxlength' => 128, 'style' => 'width:180px;']).
+    '<p class="formHint2">Config folder (e.g. .bitcoin)</p>'.
+    CUFHtml::closeCtrlHolder().
+
+    CUFHtml::openActiveCtrlHolder($coin, 'serveruser').
+    CUFHtml::activeLabelEx($coin, 'serveruser').
+    CUFHtml::activeTextField($coin, 'serveruser', ['maxlength' => 35, 'style' => 'width:180px;']).
+    '<p class="formHint2">Daemon process username</p>'.
+    CUFHtml::closeCtrlHolder().
+
+    CUFHtml::openActiveCtrlHolder($coin, 'rpchost').
+    CUFHtml::activeLabelEx($coin, 'rpchost').
+    CUFHtml::activeTextField($coin, 'rpchost', ['maxlength' => 128, 'style' => 'width:180px;']).
+    '<p class="formHint2">Wallet IP</p>'.
+    CUFHtml::closeCtrlHolder().
+
+    CUFHtml::openActiveCtrlHolder($coin, 'rpcport').
+    CUFHtml::activeLabelEx($coin, 'rpcport').
+    CUFHtml::activeTextField($coin, 'rpcport', ['maxlength' => 5, 'style' => 'width:60px;']).
+    '<p class="formHint2"></p>'.
+    CUFHtml::closeCtrlHolder().
+
+    CUFHtml::openActiveCtrlHolder($coin, 'rpcuser').
+    CUFHtml::activeLabelEx($coin, 'rpcuser').
+    CUFHtml::activeTextField($coin, 'rpcuser', ['maxlength' => 128, 'style' => 'width:180px;']).
+    '<p class="formHint2"></p>'.
+    CUFHtml::closeCtrlHolder().
+
+    CUFHtml::openActiveCtrlHolder($coin, 'rpcpasswd').
+    CUFHtml::activeLabelEx($coin, 'rpcpasswd').
+    CUFHtml::activeTextField($coin, 'rpcpasswd', ['maxlength' => 128]).
+    '<p class="formHint2"></p>'.
+    CUFHtml::closeCtrlHolder().
+
+    CUFHtml::openActiveCtrlHolder($coin, 'rpcencoding').
+    CUFHtml::activeLabelEx($coin, 'rpcencoding').
+    CUFHtml::activeTextField($coin, 'rpcencoding', ['maxlength' => 5, 'style' => 'width:60px;']).
+    '<p class="formHint2">POW / POS / DCR / GETH</p>'.
+    CUFHtml::closeCtrlHolder().
+
+    CUFHtml::openActiveCtrlHolder($coin, 'dedicatedport').
+    CUFHtml::activeLabelEx($coin, 'dedicatedport').
+    CUFHtml::activeTextField($coin, 'dedicatedport', ['maxlength' => 5, 'style' => 'width:60px;']).
+    '<p class="formHint2">Run addport to get port number</p>'.
+    CUFHtml::closeCtrlHolder().
+
+    CUFHtml::openActiveCtrlHolder($coin, 'powend_height').
+    CUFHtml::activeLabelEx($coin, 'powend_height').
+    CUFHtml::activeTextField($coin, 'powend_height', ['maxlength' => 32, 'style' => 'width:120px;']).
+    '<p class="formHint2">Height of end of PoW mining</p>'.
+    CUFHtml::closeCtrlHolder().
+
+    CUFHtml::openActiveCtrlHolder($coin, 'powlimit_bits').
+    CUFHtml::activeLabelEx($coin, 'powlimit_bits').
+    CUFHtml::activeTextField($coin, 'powlimit_bits', ['maxlength' => 32, 'style' => 'width:120px;']).
+    '<p class="formHint2">Leading \'0\' bits on powlimit (basehash for diff 1)</p>'.
+    CUFHtml::closeCtrlHolder().
+
+    CUFHtml::openActiveCtrlHolder($coin, 'rpccurl').
+    CUFHtml::activeLabelEx($coin, 'rpccurl').
+    CUFHtml::activeCheckBox($coin, 'rpccurl', ['label' => '']).
+    '<p class="formHint2">Force stratum to use curl for RPC</p>'.
+    CUFHtml::closeCtrlHolder().
+
+    CUFHtml::openActiveCtrlHolder($coin, 'rpcssl').
+    CUFHtml::activeLabelEx($coin, 'rpcssl').
+    CUFHtml::activeCheckBox($coin, 'rpcssl', ['label' => '']).
+    '<p class="formHint2">Wallet RPC secured via SSL</p>'.
+    CUFHtml::closeCtrlHolder().
+
+    CUFHtml::openActiveCtrlHolder($coin, 'rpccert').
+    CUFHtml::activeLabelEx($coin, 'rpccert').
+    CUFHtml::activeTextField($coin, 'rpccert').
+    '<p class="formHint2">Certificate file for RPC over SSL</p>'.
+    CUFHtml::closeCtrlHolder().
+
+    CUFHtml::openActiveCtrlHolder($coin, 'account').
+    CUFHtml::activeLabelEx($coin, 'account').
+    CUFHtml::activeTextField($coin, 'account', ['maxlength' => 128, 'style' => 'width:180px;']).
+    '<p class="formHint2">Wallet account to use</p>'.
+    CUFHtml::closeCtrlHolder();
+
+if ($coin->id) {
+    $tab_daemon .=
+        '<hr>' .
+        '<b>Sample wallet config</b><br>' .
+        '<pre>' .
+        Html::encode(
+            "rpcuser={$coin->rpcuser}\n" .
+            "rpcpassword={$coin->rpcpasswd}\n" .
+            "rpcport={$coin->rpcport}\n" .
+            "rpcthreads=8\nrpcallowip=127.0.0.1\nmaxconnections=12\ndaemon=1\ngen=0\n\n" .
+            'alertnotify=%s | mail -s "' . $coin->name . ' alert!" ' . YIIMP_ADMIN_EMAIL . "\n" .
+            (empty($dedport)
+                ? "blocknotify=/var/stratum/blocknotify " . YIIMP_STRATUM_URL . ":{$port} {$coin->id} %s\n"
+                : "blocknotify=/var/stratum/blocknotify " . YIIMP_STRATUM_URL . ":{$dedport} {$coin->id} %s\n")
+        ) .
+        '</pre>' .
+        '<b>Sample miner command</b><br>' .
+        '<pre>' .
+        Html::encode(
+            "-a {$coin->algo} " .
+            (empty($dedport)
+                ? "-o stratum+tcp://" . YIIMP_STRATUM_URL . ":{$port} "
+                : "-o stratum+tcp://" . YIIMP_STRATUM_URL . ":{$dedport} ") .
+            "-u {$coin->master_wallet} -p c={$coin->symbol}\n"
+        ) .
+        '</pre>';
+}
+
+$tab_exchange =
+    CUFHtml::openActiveCtrlHolder($coin, 'dontsell').
+    CUFHtml::activeLabelEx($coin, 'dontsell').
+    CUFHtml::activeCheckBox($coin, 'dontsell', ['label' => '']).
+    '<p class="formHint2">Disable auto send to exchange</p>'.
+    CUFHtml::closeCtrlHolder().
+
+    CUFHtml::openActiveCtrlHolder($coin, 'sellonbid').
+    CUFHtml::activeLabelEx($coin, 'sellonbid').
+    CUFHtml::activeCheckBox($coin, 'sellonbid', ['label' => '']).
+    '<p class="formHint2">Reduce the sell price on exchanges</p>'.
+    CUFHtml::closeCtrlHolder().
+
+    CUFHtml::openActiveCtrlHolder($coin, 'sellthreshold').
+    CUFHtml::activeLabelEx($coin, 'sellthreshold').
+    CUFHtml::activeTextField($coin, 'sellthreshold', ['maxlength' => 16, 'style' => 'width:120px;']).
+    '<p class="formHint2">Minimum amount to sell</p>'.
+    CUFHtml::closeCtrlHolder().
+
+    CUFHtml::openActiveCtrlHolder($coin, 'market').
+    CUFHtml::activeLabelEx($coin, 'market').
+    CUFHtml::activeTextField($coin, 'market', ['maxlength' => 128, 'style' => 'width:180px;']).
+    '<p class="formHint2">Selected exchange</p>'.
+    CUFHtml::closeCtrlHolder();
+
+if (empty($coin->price) || empty($coin->market) || $coin->market === 'unknown') {
+    $tab_exchange .=
+        CUFHtml::openActiveCtrlHolder($coin, 'price').
+        CUFHtml::activeLabelEx($coin, 'price').
+        CUFHtml::activeTextField($coin, 'price', ['maxlength' => 16, 'style' => 'width:120px;']).
+        '<p class="formHint2">Manually set BTC price if missing</p>'.
+        CUFHtml::closeCtrlHolder();
+}
 
 $tab_links =
     CUFHtml::openActiveCtrlHolder($coin, 'link_bitcointalk').
@@ -261,12 +451,19 @@ $tab_links =
     CUFHtml::openActiveCtrlHolder($coin, 'link_discord').
     CUFHtml::activeLabelEx($coin, 'link_discord').
     CUFHtml::activeTextField($coin, 'link_discord').
+    CUFHtml::closeCtrlHolder().
+
+    CUFHtml::openActiveCtrlHolder($coin, 'link_facebook').
+    CUFHtml::activeLabelEx($coin, 'link_facebook').
+    CUFHtml::activeTextField($coin, 'link_facebook').
     CUFHtml::closeCtrlHolder();
 
 echo Tabs::widget([
     'items' => [
         ['label' => 'General',  'content' => $tab_general,  'active' => true],
         ['label' => 'Settings', 'content' => $tab_settings],
+        ['label' => 'Daemon',   'content' => $tab_daemon],
+        ['label' => 'Exchange', 'content' => $tab_exchange],
         ['label' => 'Links',    'content' => $tab_links],
     ],
 ]);
@@ -475,8 +672,7 @@ if (!$isTailwind): ?>
 <?= $tf('block_time',    [], 'Average block time (seconds)') ?>
 <?= $colclose ?>
 <?= $col2close ?>
-<?= $tf('errors',         ['readonly' => true], '') ?>
-<?= $ta('specifications', ['rows' => 4], '') ?>
+<?= $tf('errors', ['readonly' => true], '') ?>
 </div>
 
 <!-- ── TAB: Settings ────────────────────────────────────────────────────── -->
@@ -508,6 +704,8 @@ if (!$isTailwind): ?>
 <?= $tf('max_miners',     [], 'Miners allowed by the stratum') ?>
 <?= $tf('max_shares',     [], 'Auto restart stratum after this many shares') ?>
 <?= $tf('personalization',[], 'Equihash personalization string (default "ZcashPoW")') ?>
+<?= $tf('charity_percent', [], 'Dev/foundation fee (1–10%)') ?>
+<?= $tf('charity_address', [], 'Foundation address if dev fees required') ?>
 <?= $colclose ?>
 <?= $col2close ?>
 </div>
@@ -579,10 +777,6 @@ if (!$isTailwind): ?>
 <?php if (empty($coin->price) || empty($coin->market) || $coin->market === 'unknown'): ?>
 <?= $tf('price', [], 'Manually set BTC price if missing') ?>
 <?php endif ?>
-<?= $colclose ?>
-<?= $colopen ?>
-<?= $tf('charity_percent', [], 'Dev/foundation fee (1–10%)') ?>
-<?= $tf('charity_address', [], 'Foundation address if dev fees required') ?>
 <?= $colclose ?>
 <?= $col2close ?>
 </div>

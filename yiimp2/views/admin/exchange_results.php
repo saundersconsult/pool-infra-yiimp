@@ -166,8 +166,8 @@ $totalBidPct = $totalValue > 0 ? round(($totalValue - $totalBid) / $totalValue *
             <td class="small text-muted"><?= $conv->datetoa2($market->lastsent) ?> ago</td>
             <td class="small text-muted"><?= $conv->datetoa2($market->lasttraded) ?> ago</td>
             <td class="text-end">
-                <?= Html::a('clear', ['/admin/clearmarket', 'id' => $market->id],
-                    ['class' => 'btn btn-sm btn-outline-secondary']) ?>
+                <?= Html::a('<i class="bi bi-arrow-counterclockwise"></i>', ['/admin/clearmarket', 'id' => $market->id],
+                    ['class' => 'btn btn-sm btn-outline-secondary', 'title' => 'Reset stuck market', 'encode' => false]) ?>
             </td>
         </tr>
         <?php endforeach ?>
@@ -220,10 +220,10 @@ $totalBidPct = $totalValue > 0 ? round(($totalValue - $totalBid) / $totalValue *
                 <?= $conv->bitcoinvaluetoa($r['bidValue']) ?>
             </td>
             <td class="text-end">
-                <?= Html::a('cancel', ['/admin/cancelorder', 'id' => $order->id],
-                    ['class' => 'btn btn-sm btn-outline-danger me-1', 'title' => 'Cancel on exchange']) ?>
-                <?= Html::a('clear', ['/admin/clearorder', 'id' => $order->id],
-                    ['class' => 'btn btn-sm btn-outline-secondary', 'title' => 'Remove from DB only']) ?>
+                <?= Html::a('<i class="bi bi-ban"></i>', ['/admin/cancelorder', 'id' => $order->id],
+                    ['class' => 'btn btn-sm btn-outline-danger me-1', 'title' => 'Cancel on exchange', 'encode' => false]) ?>
+                <?= Html::a('<i class="bi bi-trash"></i>', ['/admin/clearorder', 'id' => $order->id],
+                    ['class' => 'btn btn-sm btn-outline-secondary', 'title' => 'Remove from DB only', 'encode' => false]) ?>
             </td>
         </tr>
         <?php endforeach ?>
@@ -290,8 +290,8 @@ $totalBidPct = $totalValue > 0 ? round(($totalValue - $totalBid) / $totalValue *
             <td class="text-end small font-monospace <?= $totalRaw > 0.01 ? 'fw-bold' : '' ?>"><?= $total ?></td>
             <td class="text-end">
                 <?php if ($waiting): ?>
-                    <?= Html::a('del', ['/admin/deleteexchangedeposit', 'id' => $dep->id],
-                        ['class' => 'btn btn-sm btn-outline-danger']) ?>
+                    <?= Html::a('<i class="bi bi-trash"></i>', ['/admin/deleteexchangedeposit', 'id' => $dep->id],
+                        ['class' => 'btn btn-sm btn-outline-danger', 'title' => 'Delete deposit', 'encode' => false]) ?>
                 <?php endif ?>
             </td>
         </tr>
@@ -357,8 +357,11 @@ $totalBidPct = $totalValue > 0 ? round(($totalValue - $totalBid) / $totalValue *
         <td class="px-3 py-2 text-gray-400 dark:text-gray-500"><?= $conv->datetoa2($market->lastsent) ?> ago</td>
         <td class="px-3 py-2 text-gray-400 dark:text-gray-500"><?= $conv->datetoa2($market->lasttraded) ?> ago</td>
         <td class="px-3 py-2 text-right">
-            <?= Html::a('clear', ['/admin/clearmarket', 'id' => $market->id],
-                ['class' => 'text-xs text-gray-500 dark:text-gray-400 hover:text-red-500 transition-colors']) ?>
+            <?= Html::a('<i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>',
+                ['/admin/clearmarket', 'id' => $market->id],
+                ['class'  => 'inline-flex p-1.5 rounded text-gray-400 dark:text-gray-500 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors',
+                 'title'  => 'Reset stuck market',
+                 'encode' => false]) ?>
         </td>
     </tr>
     <?php endforeach ?>
@@ -441,11 +444,17 @@ $totalBidPct = $totalValue > 0 ? round(($totalValue - $totalBid) / $totalValue *
             <?= $conv->bitcoinvaluetoa($r['bidValue']) ?>
         </td>
         <td class="px-3 py-2.5 text-right">
-            <div class="flex items-center justify-end gap-2">
-                <?= Html::a('cancel', ['/admin/cancelorder', 'id' => $order->id],
-                    ['class' => 'text-xs text-red-500 hover:underline', 'title' => 'Cancel on exchange']) ?>
-                <?= Html::a('clear', ['/admin/clearorder', 'id' => $order->id],
-                    ['class' => 'text-xs text-gray-400 dark:text-gray-500 hover:underline', 'title' => 'Remove from DB only']) ?>
+            <div class="flex items-center justify-end gap-1">
+                <?= Html::a('<i data-lucide="ban" class="w-3.5 h-3.5"></i>',
+                    ['/admin/cancelorder', 'id' => $order->id],
+                    ['class'  => 'inline-flex p-1.5 rounded text-gray-400 dark:text-gray-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors',
+                     'title'  => 'Cancel on exchange',
+                     'encode' => false]) ?>
+                <?= Html::a('<i data-lucide="trash-2" class="w-3.5 h-3.5"></i>',
+                    ['/admin/clearorder', 'id' => $order->id],
+                    ['class'  => 'inline-flex p-1.5 rounded text-gray-400 dark:text-gray-500 hover:text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors',
+                     'title'  => 'Remove from DB only',
+                     'encode' => false]) ?>
             </div>
         </td>
     </tr>
@@ -551,8 +560,11 @@ $totalBidPct = $totalValue > 0 ? round(($totalValue - $totalBid) / $totalValue *
         </td>
         <td class="px-3 py-2.5 text-right">
             <?php if ($waiting): ?>
-                <?= Html::a('del', ['/admin/deleteexchangedeposit', 'id' => $dep->id],
-                    ['class' => 'text-xs text-red-500 hover:underline']) ?>
+                <?= Html::a('<i data-lucide="trash-2" class="w-3.5 h-3.5"></i>',
+                    ['/admin/deleteexchangedeposit', 'id' => $dep->id],
+                    ['class'  => 'inline-flex p-1.5 rounded text-gray-400 dark:text-gray-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors',
+                     'title'  => 'Delete deposit',
+                     'encode' => false]) ?>
             <?php endif ?>
         </td>
     </tr>

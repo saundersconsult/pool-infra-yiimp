@@ -138,8 +138,10 @@ div.json b { font-style:normal; color:#7f0000; }
 </table><br>
 
 
-<?php else: ?>
-<!-- AdminLTE + Tailwind share the same block-info layout (Bootstrap 5 is available on both) -->
+<?php elseif (!$isTailwind): ?>
+<!-- ══════════════════════════════════════════════════════════════════════════
+     ADMINLTE  (Bootstrap 5)
+     ══════════════════════════════════════════════════════════════════════════ -->
 
 <div class="card shadow-sm mb-3">
     <div class="card-header d-flex align-items-center gap-2 py-2">
@@ -184,6 +186,58 @@ div.json b { font-style:normal; color:#7f0000; }
     <div class="raw" style="display:none;"><div class="card-body p-2">
         <div class="json p-2 rounded"><?= colorizeJson(json_encode($block, 128)) ?></div>
     </div></div>
+</div>
+
+<?php else: ?>
+<!-- ══════════════════════════════════════════════════════════════════════════
+     TAILWIND
+     ══════════════════════════════════════════════════════════════════════════ -->
+
+<div class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm overflow-hidden mb-4">
+    <div class="px-4 py-2.5 border-b border-gray-200 dark:border-gray-700 flex items-center gap-2">
+        <?php if (!empty($coin->image)): ?>
+            <img src="<?= Html::encode($coin->image) ?>" width="18" alt=""
+                 style="object-fit:contain" onerror="this.style.display='none'">
+        <?php endif ?>
+        <span class="text-sm font-semibold text-gray-800 dark:text-gray-100">
+            <?= Html::encode($coin->name) ?> &mdash; Block <?= Html::encode((string)$block['height']) ?>
+        </span>
+    </div>
+    <table class="w-full text-xs">
+        <colgroup><col style="width:130px"><col></colgroup>
+        <?php
+        $infoRows = [
+            ['Coin',          $coin->createExplorerLink(Html::encode($coin->name))],
+            ['Block hash',    '<span class="txid font-mono text-gray-500 dark:text-gray-400 cursor-pointer break-all">' . Html::encode($hash) . '</span>'],
+            ['Confirmations', Html::encode((string)$confirms)],
+            ['Height',        Html::encode((string)$block['height'])],
+            ['Time',          Html::encode($d) . ' <span class="text-gray-400 dark:text-gray-500">(' . $block['time'] . ')</span>'],
+            ['Difficulty',    Html::encode((string)$block['difficulty'])],
+            ['Bits',          '<span class="font-mono">' . Html::encode($block['bits']) . '</span>'],
+            ['Nonce',         '<span class="font-mono">' . Html::encode((string)$nonce) . '</span>'],
+            ['Version',       '<span class="font-mono">' . Html::encode($version) . '</span>'],
+            ['Size',          Html::encode((string)$block['size']) . ' bytes'],
+            ['Transactions',  Html::encode((string)$txcount)],
+        ];
+        if (isset($block['flags'])) $infoRows[] = ['Flags', '<span class="font-mono">' . Html::encode($block['flags']) . '</span>'];
+        if (isset($block['previousblockhash'])) $infoRows[] = ['Previous', '<span class="font-mono">' . $coin->createExplorerLink(Html::encode($block['previousblockhash']), ['hash' => $block['previousblockhash']]) . '</span>'];
+        if (isset($block['nextblockhash'])) $infoRows[] = ['Next', '<span class="font-mono">' . $coin->createExplorerLink(Html::encode($block['nextblockhash']), ['hash' => $block['nextblockhash']]) . '</span>'];
+        $infoRows[] = ['Merkle root', '<span class="font-mono break-all">' . Html::encode($block['merkleroot']) . '</span>'];
+
+        foreach ($infoRows as [$label, $val]):
+        ?>
+        <tr class="border-b border-gray-100 dark:border-gray-700/50">
+            <td class="px-4 py-1.5 text-gray-500 dark:text-gray-400 font-semibold whitespace-nowrap border-r border-gray-100 dark:border-gray-700/50 align-top"><?= Html::encode($label) ?></td>
+            <td class="px-4 py-1.5 text-gray-700 dark:text-gray-300 overflow-hidden"><?= $val ?></td>
+        </tr>
+        <?php endforeach ?>
+    </table>
+    <!-- Raw JSON toggle (hidden by default, revealed by clicking the block hash) -->
+    <div class="raw" style="display:none;">
+        <div class="px-4 py-3 border-t border-gray-100 dark:border-gray-700/50">
+            <div class="json p-2 rounded"><?= colorizeJson(json_encode($block, 128)) ?></div>
+        </div>
+    </div>
 </div>
 
 <?php endif ?>
@@ -407,7 +461,7 @@ echo '</tbody>' . $tblClose;
     <input type="text" name="txid"   class="main-text-input" placeholder="tx hash" style="width:450px;margin:4px;">
     <input type="submit" value="Search" class="main-submit-button">
 </form>
-<?php else: ?>
+<?php elseif (!$isTailwind): ?>
 <div class="mt-3">
 <form action="<?= Html::encode($actionUrl) ?>" method="POST"
       class="d-flex align-items-center gap-2 flex-wrap">
@@ -418,4 +472,24 @@ echo '</tbody>' . $tblClose;
     <button type="submit" class="btn btn-sm btn-outline-secondary">Search</button>
 </form>
 </div>
+<?php else: ?>
+<form action="<?= Html::encode($actionUrl) ?>" method="POST"
+      class="mt-4 flex items-center gap-2 flex-wrap">
+    <input type="text" name="height"
+           class="w-24 text-sm rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-1.5
+                  bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200
+                  focus:outline-none focus:ring-2 focus:ring-indigo-500"
+           placeholder="Block height">
+    <input type="text" name="txid"
+           class="flex-1 min-w-48 text-sm rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-1.5
+                  bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200
+                  focus:outline-none focus:ring-2 focus:ring-indigo-500"
+           placeholder="Transaction hash">
+    <button type="submit"
+            class="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg
+                   text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-700
+                   hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors cursor-pointer">
+        Search
+    </button>
+</form>
 <?php endif ?>

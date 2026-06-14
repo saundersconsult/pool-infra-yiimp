@@ -104,7 +104,7 @@ if (YIIMP_ALLOW_EXCHANGE)   $links['Algo Switching'] = $homeUrl . 'site/multialg
 <div class="main-left-title">Support</div>
 <div class="main-left-inner">
 <ul class="social-icons">
-    <li><a href="https://discord.gg/DrsrWQh3qC"><img src="/images/discord.png" alt="Discord"></a></li>
+    <li><a href="https://discord.gg/DrsrWQh3qC"><img src="/images/discord.png" height="16" alt="Discord"> Discord</a></li>
 </ul>
 </div></div><br>
 
@@ -254,7 +254,7 @@ if (YIIMP_ALLOW_EXCHANGE)   $links['Algo Switching'] = $homeUrl . 'site/multialg
                           border border-gray-300 dark:border-gray-600
                           bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300
                           hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors">
-                    <img src="/images/discord.png" height="16" alt=""> Discord
+                    <img src="/images/discord.png" class="h-4 w-auto" alt=""> Discord
                 </a>
             </div>
         </div>

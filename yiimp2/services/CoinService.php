@@ -199,6 +199,42 @@ class CoinService
                 $coin->errors     = 'PoW end reached';
             }
 
+            // Cache wallet_info JSON in specifications so public explorer pages
+            // (overview + peers popup) can read without live RPC calls.
+            $walletInfo = json_decode($coin->specifications ?: '{}', true) ?: [];
+
+            $miningInfo = $remote->getmininginfo();
+            if ($miningInfo) {
+                $nh = null;
+                if (isset($miningInfo['networkhashps'])) {
+                    $raw = $miningInfo['networkhashps'];
+                    $nh  = is_array($raw) ? (float) ($raw[$coin->algo] ?? 0) : (float) $raw;
+                } elseif (isset($miningInfo['netmhashps'])) {
+                    $nh = (float) $miningInfo['netmhashps'] * 1e6;
+                }
+                if ($nh !== null && $nh > 0) {
+                    $walletInfo['networkhashps'] = $nh;
+                }
+            }
+
+            $peerList = $remote->getpeerinfo();
+            if (is_array($peerList)) {
+                $peers = [];
+                foreach ($peerList as $peer) {
+                    $addr = $peer['addr'] ?? '';
+                    if ($addr === '') continue;
+                    if (str_contains($addr, '127.0.0.1')) continue;
+                    if (str_contains($addr, '192.168.'))  continue;
+                    if (str_contains($addr, 'yiimp'))     continue;
+                    $peers[] = $addr;
+                }
+                sort($peers);
+                $walletInfo['peers'] = $peers;
+            }
+
+            $walletInfo['updated_at']   = time();
+            $coin->specifications       = json_encode($walletInfo);
+
             $coin->save();
 
             // Refresh pool balances if wallet is ahead of DB

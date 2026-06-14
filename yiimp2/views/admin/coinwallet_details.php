@@ -160,7 +160,7 @@ if ($isLegacy) {
     echo '<i class="bi bi-arrow-left-right text-secondary"></i>';
     echo '<strong class="small">Markets &amp; Bookmarks</strong>';
     echo '<span class="badge bg-secondary ms-1">' . count($markets) . '</span>';
-    echo '<span class="ms-auto small text-muted">' . $bookmarkAdd . ' Add</span>';
+    echo '<a href="/admin/bookmark-add?id=' . $coin->id . '" class="btn btn-sm btn-outline-secondary ms-auto" title="Add bookmark"><i class="bi bi-bookmark-plus"></i></a>';
     echo '</div><div class="card-body p-0">';
     echo '<div class="overflow-auto" style="max-height:200px;">';
     echo '<table class="table table-sm table-bordered mb-0"><thead class="table-light"><tr>';
@@ -172,7 +172,7 @@ if ($isLegacy) {
     echo '<div class="px-4 py-2.5 border-b border-gray-200 dark:border-gray-700 flex items-center gap-2">';
     echo '<i data-lucide="arrow-left-right" class="w-4 h-4 text-gray-400 shrink-0"></i>';
     echo '<span class="text-sm font-semibold text-gray-800 dark:text-gray-100">Markets &amp; Bookmarks</span>';
-    echo '<span class="ml-auto text-xs text-indigo-600 dark:text-indigo-400">' . $bookmarkAdd . ' Add</span>';
+    echo '<a href="/admin/bookmark-add?id=' . $coin->id . '" class="ml-auto inline-flex items-center gap-1 px-2 py-1 text-xs rounded-lg text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors" title="Add bookmark"><i data-lucide="bookmark-plus" class="w-3.5 h-3.5"></i> Add</a>';
     echo '</div><div class="overflow-x-auto" style="max-height:200px;">';
     echo '<table class="w-full text-xs"><thead>';
     echo '<tr class="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 font-semibold uppercase tracking-wider sticky top-0">';
@@ -204,10 +204,22 @@ foreach ($markets as $market) {
     }
     $depositCell .= ' <a href="/admin/market/update?id=' . $market->id . '">edit</a>';
 
-    $actCell = $disabled
-        ? '<a href="/admin/market/enable?id=' . $market->id . '&en=1" title="Enable">enable</a>'
-        : '<a href="/admin/market/enable?id=' . $market->id . '&en=0" title="Disable">disable</a>';
-    $actCell .= ' &nbsp;<a href="/admin/market/delete?id=' . $market->id . '" title="Remove" class="' . ($isLegacy ? 'red' : 'text-danger') . '">delete</a>';
+    if ($isLegacy) {
+        $actCell = $disabled
+            ? '<a href="/admin/market/enable?id=' . $market->id . '&en=1" title="Enable">enable</a>'
+            : '<a href="/admin/market/enable?id=' . $market->id . '&en=0" title="Disable">disable</a>';
+        $actCell .= ' &nbsp;<a href="/admin/market/delete?id=' . $market->id . '" title="Remove" class="red">delete</a>';
+    } elseif (!$isTailwind) {
+        $actCell = $disabled
+            ? '<a href="/admin/market/enable?id=' . $market->id . '&en=1" class="btn btn-sm btn-outline-success" title="Enable market"><i class="bi bi-toggle-off"></i></a>'
+            : '<a href="/admin/market/enable?id=' . $market->id . '&en=0" class="btn btn-sm btn-outline-warning" title="Disable market"><i class="bi bi-toggle-on"></i></a>';
+        $actCell .= ' <a href="/admin/market/delete?id=' . $market->id . '" class="btn btn-sm btn-outline-danger" title="Delete market"><i class="bi bi-trash"></i></a>';
+    } else {
+        $actCell = $disabled
+            ? '<a href="/admin/market/enable?id=' . $market->id . '&en=1" class="inline-flex p-1.5 rounded text-gray-400 dark:text-gray-500 hover:text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 transition-colors" title="Enable market"><i data-lucide="toggle-left" class="w-3.5 h-3.5"></i></a>'
+            : '<a href="/admin/market/enable?id=' . $market->id . '&en=0" class="inline-flex p-1.5 rounded text-gray-400 dark:text-gray-500 hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors" title="Disable market"><i data-lucide="toggle-right" class="w-3.5 h-3.5"></i></a>';
+        $actCell .= ' <a href="/admin/market/delete?id=' . $market->id . '" class="inline-flex p-1.5 rounded text-gray-400 dark:text-gray-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors" title="Delete market"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></a>';
+    }
 
     if ($isLegacy) {
         $rowCls = 'ssrow' . ($disabled ? ' disabled' : '');
@@ -273,7 +285,13 @@ foreach ($bookmarks as $bookmark) {
         ? Html::a('send', 'javascript:;', ['onclick' => "return showSellAmountDialog($name, $addr, 0, {$bookmark->id});"]) . ' ' . Html::encode($bookmark->address)
         : '';
     $bkDepositCell .= ' <a href="/admin/bookmark-edit?id=' . $bookmark->id . '">edit</a>';
-    $bkActCell = '<a href="/admin/bookmark-del?id=' . $bookmark->id . '" class="' . ($isLegacy ? 'red' : 'text-danger') . '">delete</a>';
+    if ($isLegacy) {
+        $bkActCell = '<a href="/admin/bookmark-del?id=' . $bookmark->id . '" class="red">delete</a>';
+    } elseif (!$isTailwind) {
+        $bkActCell = '<a href="/admin/bookmark-del?id=' . $bookmark->id . '" class="btn btn-sm btn-outline-danger" title="Delete bookmark"><i class="bi bi-trash"></i></a>';
+    } else {
+        $bkActCell = '<a href="/admin/bookmark-del?id=' . $bookmark->id . '" class="inline-flex p-1.5 rounded text-gray-400 dark:text-gray-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors" title="Delete bookmark"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></a>';
+    }
 
     if ($isLegacy) {
         echo '<tr class="ssrow bookmark"><td><b>' . Html::encode($bookmark->label) . '</b></td>';

@@ -95,6 +95,7 @@ $intervalFmt = function (int $secs): string {
 <style>
 #refresh-bar { height:3px; background:#08c; transition:width 1s linear; margin-bottom:.75rem; }
 .job-badge { padding:1px 6px; border-radius:3px; font-size:.8em; display:inline-block; }
+.job-actions form { display:inline; margin-right:2px; }
 </style>
 <div id="refresh-bar" style="width:100%"></div>
 
@@ -109,41 +110,56 @@ Run <code>php yii migrate --migrationPath=@yii/queue/db/migrations</code> then
 <div class="main-left-box">
 <div class="main-left-title">Queue Jobs<?php if ($balancesLocked): ?> &mdash; <span style="color:#c55;">&#9888; balances locked</span><?php endif ?></div>
 <div class="main-left-inner">
-<p style="font-size:.85em;">
+<div style="font-size:.85em;margin-bottom:4px;">
 <?= $countRunning ?> running &nbsp;&middot;&nbsp;
 <?= $countActive ?> active &nbsp;&middot;&nbsp;
 <?php if ($countPaused): ?><span style="color:#666"><?= $countPaused ?> paused</span> &nbsp;&middot;&nbsp;<?php endif ?>
-<?php if ($countMissing): ?><span style="color:#c55"><?= $countMissing ?> not seeded</span><?php endif ?>
-&nbsp;&nbsp;
-<?= Html::beginForm(['jobs/seed-all']) ?>
+<?php if ($countMissing): ?><span style="color:#c55"><?= $countMissing ?> not seeded</span>&nbsp;&nbsp;<?php endif ?>
+<?= Html::beginForm(['jobs/seed-all'], 'post', ['style' => 'display:inline']) ?>
 <?= Html::submitButton('Seed missing', ['style' => 'font-size:.8em;padding:2px 8px;cursor:pointer;']) ?>
 <?= Html::endForm() ?>
-</p>
+</div>
 <?= \app\widgets\Alert::widget() ?>
 </div></div>
 
+<div class="main-left-box">
+<div class="main-left-inner">
+<table class="dataGrid2" style="width:100%;table-layout:fixed;">
+<colgroup>
+    <col><!-- job name, flexible -->
+    <col style="width:50px;">
+    <col style="width:80px;">
+    <col style="width:58px;">
+    <col style="width:76px;">
+    <col style="width:136px;">
+</colgroup>
+<thead><tr>
+<th>Job</th>
+<th align="right">Every</th>
+<th align="center">Status</th>
+<th align="right">Runs in</th>
+<th align="right">Last run</th>
+<th>Actions</th>
+</tr></thead>
+<tbody>
 <?php foreach ($grouped as $domain => $domainJobs):
     [$label] = $domainMeta[$domain] ?? [ucfirst($domain), 'circle'];
 ?>
-<div class="main-left-box">
-<div class="main-left-title" style="font-size:.85em;"><?= Html::encode($label) ?></div>
-<div class="main-left-inner">
-<table class="dataGrid2" style="width:100%;">
-<thead><tr>
-<th>Job</th><th align="right">Every</th><th align="center">Status</th>
-<th align="right">Runs in</th><th align="right">Last run</th><th>Actions</th>
-</tr></thead>
-<tbody>
+<tr style="background:#e8e8e8;">
+    <td colspan="6" style="font-weight:bold;font-size:.8em;padding:3px 6px;color:#444;">
+        <?= Html::encode($label) ?>
+    </td>
+</tr>
 <?php foreach ($domainJobs as $j):
     [$badgeStyle, $badgeText] = $badgeLegacy[$j['status']] ?? ['background:#eee;color:#333;', $j['status']];
 ?>
 <tr class="ssrow">
-<td style="font-family:monospace;font-size:.85em;"><?= Html::encode($j['name']) ?></td>
+<td style="font-family:monospace;font-size:.85em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><?= Html::encode($j['name']) ?></td>
 <td align="right" style="font-size:.8em;color:#666;"><?= $intervalFmt($j['interval']) ?></td>
 <td align="center"><span class="job-badge" style="<?= $badgeStyle ?>"><?= $badgeText ?></span></td>
 <td align="right" style="font-size:.85em;"><?= $fmtSecs($j['secsLeft']) ?></td>
 <td align="right" style="font-size:.85em;color:#666;"><?= $fmtAgo($j['lastRun']) ?></td>
-<td style="white-space:nowrap;">
+<td class="job-actions" style="white-space:nowrap;">
 <?php if (!$j['paused']): ?>
 <?= Html::beginForm(['jobs/pause', 'job' => $j['name']]) ?>
 <?= Html::submitButton('Pause', ['style' => 'font-size:.78em;padding:1px 6px;cursor:pointer;']) ?>
@@ -164,9 +180,11 @@ Run <code>php yii migrate --migrationPath=@yii/queue/db/migrations</code> then
 </td>
 </tr>
 <?php endforeach ?>
-</tbody></table>
-</div></div>
 <?php endforeach ?>
+</tbody>
+</table>
+</div></div>
+
 <?php endif // tableExists ?>
 
 

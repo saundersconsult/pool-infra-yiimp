@@ -33,7 +33,7 @@ echo <<<end
 <br><br><br><br><br><br><br><br><br><br>
 </div>
 
-<br><a href='/admin/coincreate'><img width=16 src=''><b>CREATE COIN</b></a>
+<br><a href='/admin/coinwallet_create'><img width=16 src=''><b>CREATE COIN</b></a>
 <!-- br><a href='/admin/updateprice'><img width=16 src=''><b>UPDATE PRICE</b></a -->
 <!-- br><a href='/admin/dopayments'><img width=16 src=''><b>DO PAYMENTS</b></a -->
 

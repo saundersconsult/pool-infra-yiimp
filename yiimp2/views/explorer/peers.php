@@ -1,6 +1,5 @@
 <?php
 
-use app\components\rpc\WalletRPC;
 use yii\helpers\Html;
 
 if (!$coin) return Yii::$app->controller->goBack();
@@ -8,19 +7,9 @@ if (!$coin) return Yii::$app->controller->goBack();
 $this->title = 'Peers — ' . $coin->name;
 $isTailwind  = Yii::$app->LayoutManager->isTailwind();
 
-$remote     = new WalletRPC($coin);
-$info       = $remote->error === null ? $remote->getinfo()    : false;
-$list       = $remote->error === null ? $remote->getpeerinfo(): [];
-
-$addnode = [];
-foreach ((array) $list as $peer) {
-    $node = Yii::$app->ConversionUtils->arraySafeVal($peer, 'addr');
-    if (str_contains($node, '127.0.0.1')) continue;
-    if (str_contains($node, '192.168.'))  continue;
-    if (str_contains($node, 'yiimp'))     continue;
-    $addnode[] = ($coin->rpcencoding === 'DCR' ? 'addpeer=' : 'addnode=') . $node;
-}
-asort($addnode);
+$prefix  = $coin->rpcencoding === 'DCR' ? 'addpeer=' : 'addnode=';
+$peers   = $coin->getWalletInfo()['peers'] ?? [];
+$addnode = array_map(fn($addr) => $prefix . $addr, $peers);
 ?>
 
 <?php if ($isTailwind): ?>

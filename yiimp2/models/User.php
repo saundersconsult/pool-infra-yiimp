@@ -75,7 +75,7 @@ class User extends \yii\base\BaseObject implements \yii\web\IdentityInterface
      */
     public function getAuthKey()
     {
-        return $this->authKey;
+        return hash('sha256', YIIMP_ADMIN_USER . ':' . YIIMP_ADMIN_PASS . ':yiimp_auth');
     }
 
     /**
@@ -83,7 +83,7 @@ class User extends \yii\base\BaseObject implements \yii\web\IdentityInterface
      */
     public function validateAuthKey($authKey)
     {
-        return $this->authKey === $authKey;
+        return $this->getAuthKey() === $authKey;
     }
 
     /**

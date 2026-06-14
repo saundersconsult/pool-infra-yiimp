@@ -30,7 +30,7 @@ $isLegacy   = Yii::$app->LayoutManager->isLegacy();
 <div id="main_results"></div>
 
 <br>
-<a href='/admin/coincreate'><b>CREATE COIN</b></a>&nbsp;&nbsp;
+<a href='/admin/coinwallet_create'><b>CREATE COIN</b></a>&nbsp;&nbsp;
 <a href='/admin/updateprice'><b>UPDATE PRICE</b></a>
 
 
@@ -53,7 +53,7 @@ $isLegacy   = Yii::$app->LayoutManager->isLegacy();
         <?php endif ?>
     </div>
     <div class="d-flex gap-2">
-        <a href="/admin/coincreate" class="btn btn-sm btn-outline-success">
+        <a href="/admin/coinwallet_create" class="btn btn-sm btn-outline-success">
             <i class="bi bi-plus-circle me-1"></i>Create Coin
         </a>
         <a href="/admin/updateprice" class="btn btn-sm btn-outline-primary">
@@ -96,7 +96,7 @@ $isLegacy   = Yii::$app->LayoutManager->isLegacy();
         <?php endif ?>
     </div>
     <div class="flex gap-2">
-        <a href="/admin/coincreate"
+        <a href="/admin/coinwallet_create"
            class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg
                   border border-green-300 dark:border-green-700
                   bg-white dark:bg-gray-700 text-green-600 dark:text-green-400

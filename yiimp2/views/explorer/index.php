@@ -1,7 +1,6 @@
 <?php
 
 use yii\helpers\Html;
-use app\components\rpc\WalletRPC;
 use app\models\Coins;
 
 $this->title = 'Block Explorer';
@@ -12,50 +11,37 @@ $conv        = Yii::$app->ConversionUtils;
 // ── Shared coin list + RPC data ───────────────────────────────────────────────
 $list = Coins::find()->where(['enable' => 1, 'visible' => 1])->orderBy('name')->all();
 
-$coinRows = [];
+$coinRows  = [];
+$peersData = [];
 foreach ($list as $coin) {
     if ($coin->symbol === 'BTC') continue;
     if (!empty($coin->symbol2)) continue;
 
     $coin->version = $conv->formatWalletVersion($coin);
 
-    $coin->network_hash = Yii::$app->cache->get("yiimp-nethashrate-{$coin->symbol}");
-    if (!$coin->network_hash) {
-        $remote = new WalletRPC($coin);
-        $info   = $remote->error === null ? $remote->getmininginfo() : false;
-        if (isset($info['networkhashps'])) {
-            $nh = is_array($info['networkhashps'])
-                ? ($info['networkhashps'][$coin->algo] ?? 0)
-                : $info['networkhashps'];
-            $coin->network_hash = $nh;
-            Yii::$app->cache->set("yiimp-nethashrate-{$coin->symbol}", $nh, 60);
-        } elseif (isset($info['netmhashps'])) {
-            $nh = floatval($info['netmhashps']) * 1e6;
-            $coin->network_hash = $nh;
-            Yii::$app->cache->set("yiimp-nethashrate-{$coin->symbol}", $nh, 60);
-        }
-    }
+    $walletInfo         = $coin->getWalletInfo();
+    $coin->network_hash = $walletInfo['networkhashps'] ?? null;
 
     $difficulty  = $conv->Itoa2($coin->difficulty, 3);
     $diffnote    = in_array($coin->algo, ['equihash', 'quark']) ? '*' : '';
     $nethash     = $coin->network_hash
                    ? strtoupper($conv->Itoa2($coin->network_hash)) . 'H/s' : '';
     $cnxClass    = (intval($coin->connections) > 3) ? '' : 'low';
-    $peersUrl    = "javascript:wallet_peers({$coin->id});";
+    $peersUrl    = "javascript:showPeers({$coin->id});";
     $link        = !empty($coin->link_bitcointalk) ? $coin->link_bitcointalk
                  : (!empty($coin->link_site) ? $coin->link_site : null);
     $linkLabel   = !empty($coin->link_bitcointalk) ? 'forum' : 'site';
+
+    $peersData[$coin->id] = [
+        'name'   => $coin->name,
+        'prefix' => $coin->rpcencoding === 'DCR' ? 'addpeer=' : 'addnode=',
+        'peers'  => $walletInfo['peers'] ?? [],
+    ];
 
     $coinRows[] = compact('coin', 'difficulty', 'diffnote', 'nethash',
                           'cnxClass', 'peersUrl', 'link', 'linkLabel');
 }
 ?>
-<script>
-function wallet_peers(id) {
-    window.open('/explorer/peers?id=' + id, 'peers',
-        'width=400,height=600,location=no,menubar=no,resizable=yes,status=no,toolbar=no');
-}
-</script>
 
 <?php if ($isLegacy): ?>
 <!-- ══════════════════════════════════════════════════════════════════════════
@@ -287,3 +273,150 @@ document.addEventListener('DOMContentLoaded', function () {
 ?>
 
 <?php endif ?>
+
+<!-- ── Peers overlay (shared, scheme-styled) ─────────────────────────────────── -->
+<?php if ($isLegacy): ?>
+<div id="peers-overlay" style="display:none;position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.45);"
+     onclick="if(event.target===this)closePeers();">
+    <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+                background:#fff;border:1px solid #ccc;border-radius:4px;
+                min-width:320px;max-width:520px;width:90%;box-shadow:0 4px 16px rgba(0,0,0,.25);">
+        <div style="padding:8px 12px;border-bottom:1px solid #ddd;display:flex;align-items:center;justify-content:space-between;gap:8px;">
+            <b id="peers-title" style="font-size:.9em;flex:1;"></b>
+            <button id="peers-copy" onclick="copyPeers()" style="font-size:.75em;padding:2px 8px;cursor:pointer;border:1px solid #aaa;border-radius:3px;background:#f5f5f5;">Copy</button>
+            <a href="javascript:closePeers();" style="font-size:1.3em;text-decoration:none;color:#666;line-height:1;">&times;</a>
+        </div>
+        <div style="padding:10px 12px;max-height:400px;overflow-y:auto;">
+            <pre id="peers-content" style="margin:0;font-size:.8em;white-space:pre-wrap;word-break:break-all;"></pre>
+            <p id="peers-empty" style="display:none;color:#999;font-size:.85em;margin:0;">No peers available.</p>
+        </div>
+    </div>
+</div>
+
+<?php elseif (!$isTailwind): ?>
+<div id="peers-overlay" style="display:none;position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.45);"
+     onclick="if(event.target===this)closePeers();">
+    <div class="card shadow-lg" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+                min-width:340px;max-width:540px;width:90%;">
+        <div class="card-header d-flex align-items-center gap-2 py-2">
+            <span class="fw-semibold small me-auto" id="peers-title"></span>
+            <button id="peers-copy" type="button" onclick="copyPeers()"
+                    class="btn btn-sm btn-outline-secondary" style="font-size:.72rem;padding:1px 8px;">Copy</button>
+            <button type="button" class="btn-close btn-sm" onclick="closePeers()"></button>
+        </div>
+        <div class="card-body p-3" style="max-height:420px;overflow-y:auto;">
+            <pre id="peers-content" class="small mb-0" style="white-space:pre-wrap;word-break:break-all;"></pre>
+            <p id="peers-empty" class="text-muted small mb-0" style="display:none;">No peers available.</p>
+        </div>
+    </div>
+</div>
+
+<?php else: ?>
+<div id="peers-overlay" class="fixed inset-0 z-50 hidden items-center justify-center"
+     onclick="if(event.target===this)closePeers();">
+    <div class="absolute inset-0 bg-black/50 backdrop-blur-sm"></div>
+    <div class="relative bg-white dark:bg-gray-800 rounded-2xl shadow-2xl
+                w-full max-w-lg mx-4 overflow-hidden">
+        <div class="flex items-center gap-3 px-5 py-3
+                    border-b border-gray-200 dark:border-gray-700">
+            <span class="text-sm font-semibold text-gray-800 dark:text-gray-100 flex-1"
+                  id="peers-title"></span>
+            <button id="peers-copy" onclick="copyPeers()"
+                    class="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg
+                           border border-gray-300 dark:border-gray-600
+                           bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300
+                           hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors">
+                Copy
+            </button>
+            <button onclick="closePeers()"
+                    class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300
+                           transition-colors text-xl leading-none">&times;</button>
+        </div>
+        <div class="px-5 py-4 max-h-96 overflow-y-auto">
+            <pre id="peers-content"
+                 class="text-xs font-mono text-gray-700 dark:text-gray-300
+                        bg-gray-50 dark:bg-gray-900/40 rounded-lg p-3
+                        whitespace-pre-wrap break-all m-0"></pre>
+            <p id="peers-empty"
+               class="hidden text-sm text-gray-400 dark:text-gray-500 m-0">No peers available.</p>
+        </div>
+    </div>
+</div>
+<?php endif ?>
+
+<script>
+var _peersData  = <?= json_encode($peersData, JSON_UNESCAPED_UNICODE) ?>;
+var _isTailwind = <?= $isTailwind ? 'true' : 'false' ?>;
+
+function showPeers(id) {
+    var data    = _peersData[id];
+    if (!data) return;
+    var lines   = data.peers.map(function(a) { return data.prefix + a; });
+    var content = document.getElementById('peers-content');
+    var empty   = document.getElementById('peers-empty');
+    var overlay = document.getElementById('peers-overlay');
+
+    document.getElementById('peers-title').textContent = data.name + ' — Peers';
+
+    if (lines.length > 0) {
+        content.textContent   = lines.join('\n');
+        content.style.display = '';
+        if (empty) empty.style.display = 'none';
+    } else {
+        content.style.display = 'none';
+        if (empty) empty.style.display = '';
+    }
+
+    if (_isTailwind) {
+        overlay.classList.remove('hidden');
+        overlay.classList.add('flex');
+    } else {
+        overlay.style.display = 'block';
+    }
+}
+
+function closePeers() {
+    var overlay = document.getElementById('peers-overlay');
+    if (_isTailwind) {
+        overlay.classList.add('hidden');
+        overlay.classList.remove('flex');
+    } else {
+        overlay.style.display = 'none';
+    }
+}
+
+function copyPeers() {
+    var text = (document.getElementById('peers-content').textContent || '').trim();
+    if (!text) return;
+    var btn = document.getElementById('peers-copy');
+    var original = btn.textContent;
+
+    var done = function() {
+        btn.textContent = 'Copied ✓';
+        setTimeout(function() { btn.textContent = original; }, 1500);
+    };
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done).catch(function() {
+            fallbackCopy(text, done);
+        });
+    } else {
+        fallbackCopy(text, done);
+    }
+}
+
+function fallbackCopy(text, done) {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0;';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    try { document.execCommand('copy'); done(); } catch(e) {}
+    document.body.removeChild(ta);
+}
+
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') closePeers();
+});
+</script>
