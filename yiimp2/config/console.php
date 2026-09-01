@@ -38,6 +38,11 @@ $config = [
     'basePath' => dirname(__DIR__),
     'bootstrap' => ['log', 'queue'],
     'controllerNamespace' => 'app\commands',
+    'controllerMap' => [
+        'jobs-admin' => [
+            'class' => \app\commands\QueueController::class,
+        ],
+    ],
     'aliases' => [
         '@bower' => '@vendor/bower-asset',
         '@npm'   => '@vendor/npm-asset',

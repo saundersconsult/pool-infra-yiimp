@@ -22,16 +22,16 @@
 
 int main(int argc, char **argv)
 {
-	if(argc < 4)
+	if(argc < 5)
 	{
-		printf("usage: blocknotify server:port coinid blockhash\n");
+		printf("usage: blocknotify server:port coinid blockhash password\n");
 		return 1;
 	}
 
 	char *p = strchr(argv[1], ':');
 	if(!p)
 	{
-		printf("usage: blocknotify server:port coinid blockhash\n");
+		printf("usage: blocknotify server:port coinid blockhash password\n");
 		return 1;
 	}
 
@@ -71,7 +71,7 @@ int main(int argc, char **argv)
 	}
 
 	char buffer[1024];
-	sprintf(buffer, "{\"id\":1,\"method\":\"mining.update_block\",\"params\":[\"tu8tu5\",%d,\"%s\"]}\n", coinid, blockhash);
+	snprintf(buffer, sizeof(buffer), "{\"id\":1,\"method\":\"mining.update_block\",\"params\":[\"%s\",%d,\"%s\"]}\n", argv[4], coinid, blockhash);
 
 	send(sock, buffer, strlen(buffer), 0);
 	close(sock);

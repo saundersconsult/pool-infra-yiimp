@@ -4,6 +4,7 @@ namespace app\jobs\earnings;
 
 use Yii;
 use app\jobs\BaseJob;
+use app\models\Mining;
 
 /**
  * Execute the full payment sequence: backup, send coins to users, clean database.
@@ -25,8 +26,17 @@ class PaymentsJob extends BaseJob
             return;
         }
 
-        $freq       = defined('YIIMP_PAYMENTS_FREQ') ? (int) YIIMP_PAYMENTS_FREQ : 14400;
-        $lastPayout = (int) (Yii::$app->cache->get('last_payout_time') ?: 0);
+        $freq   = defined('YIIMP_PAYMENTS_FREQ') ? (int) YIIMP_PAYMENTS_FREQ : 14400;
+        $mining = Mining::find()->one();
+
+        if (!$mining) {
+            Yii::error('PaymentsJob: mining state row not found; refusing to run payments.');
+            return;
+        }
+
+        // mining.last_payout is the persistent authoritative payment-cycle timestamp.
+        // Both the scheduler and UI must derive the next payout from this value.
+        $lastPayout = (int) $mining->last_payout;
 
         if ($lastPayout + $freq > time()) {
             return;
@@ -38,7 +48,13 @@ class PaymentsJob extends BaseJob
             $svc->doBackup();
             $svc->doPayments();
             $svc->cleanDatabase();
-            Yii::$app->cache->set('last_payout_time', time(), $freq * 2);
+
+            // Persist the payment-cycle anchor so it survives application/container
+            // restarts and remains identical to the timestamp displayed by the UI.
+            $mining->last_payout = time();
+            if (!$mining->save(false, ['last_payout'])) {
+                throw new \RuntimeException('PaymentsJob: failed to persist last_payout.');
+            }
         } finally {
             Yii::$app->cache->delete('balances_locked');
         }

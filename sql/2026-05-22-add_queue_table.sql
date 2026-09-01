@@ -19,6 +19,14 @@ CREATE TABLE IF NOT EXISTS `queue` (
   KEY `priority`    (`priority`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- Yii migration history table. A pristine YiiMP database does not contain
+-- this table, but the queue migration bookkeeping below requires it.
+CREATE TABLE IF NOT EXISTS `migration` (
+  `version` VARCHAR(180) NOT NULL,
+  `apply_time` INT(11) DEFAULT NULL,
+  PRIMARY KEY (`version`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- Mark all five yii2-queue internal migrations as applied so that
 -- running "php yii migrate" does not try to re-run them.
 INSERT IGNORE INTO `migration` (`version`, `apply_time`) VALUES
