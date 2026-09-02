@@ -31,6 +31,14 @@ struct YAAMP_CLIENT_ALGO
 	YAAMP_ALGO *algo;
 };
 
+#define YAAMP_CLIENT_MAX_AUX_ACCOUNTS 16
+
+struct YAAMP_AUX_ACCOUNT
+{
+	int coinid;
+	int userid;
+};
+
 #define YAAMP_JOB_MAXHISTORY	16
 
 #define YAAMP_CLIENT_MINSPEED	0.00001
@@ -70,6 +78,11 @@ public:
 
 	std::vector<std::string> coins_mining_list;
 	std::vector<std::string> coins_ignore_list;
+
+	// Pool Infra: native payout account for explicitly configured Aux coins.
+	// Keep POD: YAAMP_CLIENT is zeroed with memset() after allocation.
+	YAAMP_AUX_ACCOUNT aux_accounts[YAAMP_CLIENT_MAX_AUX_ACCOUNTS];
+	int aux_accounts_count;
 
 	double difficulty_actual;
 	double difficulty_remote;

@@ -46,20 +46,20 @@ function BackendCoinsUpdate()
 			debuglog("{$coin->symbol} no getinfo answer, retrying...");
 			sleep(3);
 			$info = $remote->getinfo();
-			if (!$info) {
-				debuglog("{$coin->symbol} disabled, no answer after 2 attempts. {$remote->error}");
-				$coin->enable = false;
-				$coin->connections = 0;
-				$coin->save();
-				continue;
-			}
-		}
+                        if (!$info) {
+                                debuglog("{$coin->symbol} unavailable, no answer after 2 attempts. {$remote->error}");
+                                $coin->auto_ready = false;
+                                $coin->connections = 0;
+                                $coin->errors = $remote->error;
+                                $coin->save();
+                                continue;
+                        }
+                }
 
-		// auto-enable if auto_ready is set
-		if($coin->auto_ready && !empty($info))
-			$coin->enable = true;
-		else if (empty($info))
-			continue;
+                // Pool Infra: enable is administrative intent and must not be
+                // changed by automatic daemon-health polling.
+                if (empty($info))
+                        continue;
 
 		if ($debug) echo "{$coin->symbol}\n";
 

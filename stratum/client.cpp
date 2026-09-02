@@ -295,6 +295,20 @@ bool client_authorize(YAAMP_CLIENT *client, json_value *json_params)
 		return false;
 	}
 	
+        // Pool Infra: explicit Aux payout mappings are independent of the
+        // global autoexchange mode and validate each Aux address directly.
+        if (!db_resolve_aux_accounts(g_db, client))
+        {
+                clientlog(client, "bad auxiliary payout configuration");
+                client_send_result(client, "false");
+
+                CommonLock(&g_db_mutex);
+                db_clear_worker(g_db, client);
+                CommonUnlock(&g_db_mutex);
+
+                return false;
+        }
+
 	client_send_result(client, "true");
 	client_send_difficulty(client, client->difficulty_actual);
 

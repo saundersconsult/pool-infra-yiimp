@@ -240,3 +240,220 @@ void db_init_user_coinid(YAAMP_DB *db, YAAMP_CLIENT *client)
 			client->coinid, client->userid);
 }
 
+// Pool Infra: resolve explicit native Aux payout directives from the miner
+// password, for example FLOOF=<address>. Unknown password keys remain ignored
+// by this resolver so existing YiiMP directives retain their normal behavior.
+bool db_resolve_aux_accounts(YAAMP_DB *db, YAAMP_CLIENT *client)
+{
+	struct AUX_REQUEST
+	{
+		YAAMP_COIND *coind;
+		char address[256];
+		int userid;
+		int existing_coinid;
+	};
+
+	AUX_REQUEST requests[YAAMP_CLIENT_MAX_AUX_ACCOUNTS];
+	memset(requests, 0, sizeof(requests));
+
+	client->aux_accounts_count = 0;
+	int request_count = 0;
+
+	char password[1024] = { 0 };
+	strncpy(password, client->password, sizeof(password)-1);
+
+	char *saveptr = NULL;
+	for(char *token = strtok_r(password, ",", &saveptr);
+		token;
+		token = strtok_r(NULL, ",", &saveptr))
+	{
+		char *eq = strchr(token, '=');
+		if(!eq || eq == token || !eq[1])
+			continue;
+
+		*eq = '\0';
+		char *symbol = token;
+		char *address = eq + 1;
+		YAAMP_COIND *aux = NULL;
+
+		for(CLI li = g_list_coind.first; li; li = li->next)
+		{
+			YAAMP_COIND *coind = (YAAMP_COIND *)li->data;
+
+			if(!coind->isaux)
+				continue;
+
+			if(!coind_can_mine(coind, true))
+				continue;
+
+			if(g_current_algo && strlen(g_current_algo->name) &&
+				strcmp(g_current_algo->name, coind->algo))
+				continue;
+
+			if(!strcmp(symbol, coind->symbol))
+			{
+				aux = coind;
+				break;
+			}
+		}
+
+		if(!aux)
+			continue;
+
+		if(request_count >= YAAMP_CLIENT_MAX_AUX_ACCOUNTS)
+		{
+			clientlog(client, "too many auxiliary payout accounts");
+			return false;
+		}
+
+		if(strlen(address) < MIN_ADDRESS_LEN ||
+			strlen(address) > MAX_ADDRESS_LEN)
+		{
+			clientlog(client,
+				"%s auxiliary payout address has invalid length",
+				aux->symbol);
+			return false;
+		}
+
+		char clean_address[256] = { 0 };
+		strncpy(clean_address, address, sizeof(clean_address)-1);
+		db_check_user_input(clean_address);
+
+		if(strcmp(clean_address, address))
+		{
+			clientlog(client,
+				"%s auxiliary payout address contains invalid characters",
+				aux->symbol);
+			return false;
+		}
+
+		if(!coind_validate_user_address(aux, clean_address))
+		{
+			clientlog(client,
+				"unable to verify %s auxiliary payout address %s",
+				aux->symbol, clean_address);
+			return false;
+		}
+
+		for(int n=0; n<request_count; n++)
+		{
+			if(requests[n].coind->id == aux->id)
+			{
+				clientlog(client,
+					"duplicate auxiliary payout directive for %s",
+					aux->symbol);
+				return false;
+			}
+		}
+
+		requests[request_count].coind = aux;
+		strncpy(requests[request_count].address, clean_address,
+			sizeof(requests[request_count].address)-1);
+		request_count++;
+	}
+
+	if(!request_count)
+		return true;
+
+	CommonLock(&g_db_mutex);
+
+	// Validate every existing account association before changing anything.
+	for(int n=0; n<request_count; n++)
+	{
+		AUX_REQUEST *req = &requests[n];
+
+		db_query(db,
+			"SELECT id, coinid, is_locked FROM accounts WHERE username='%s'",
+			req->address);
+
+		MYSQL_RES *result = mysql_store_result(&db->mysql);
+		if(!result)
+		{
+			CommonUnlock(&g_db_mutex);
+			return false;
+		}
+
+		MYSQL_ROW row = mysql_fetch_row(result);
+		if(row)
+		{
+			req->userid = atoi(row[0]);
+			req->existing_coinid = row[1] ? atoi(row[1]) : 0;
+			bool locked = row[2] && atoi(row[2]);
+
+			mysql_free_result(result);
+
+			if(locked)
+			{
+				clientlog(client,
+					"%s auxiliary payout account is locked",
+					req->coind->symbol);
+				CommonUnlock(&g_db_mutex);
+				return false;
+			}
+
+			if(req->existing_coinid &&
+				req->existing_coinid != req->coind->id)
+			{
+				clientlog(client,
+					"%s auxiliary payout address is already assigned to coinid %d",
+					req->coind->symbol, req->existing_coinid);
+				CommonUnlock(&g_db_mutex);
+				return false;
+			}
+		}
+		else
+		{
+			mysql_free_result(result);
+		}
+	}
+
+	// All mappings are compatible. Bind/create ordinary native-coin accounts.
+	for(int n=0; n<request_count; n++)
+	{
+		AUX_REQUEST *req = &requests[n];
+
+		if(req->userid)
+		{
+			if(!req->existing_coinid)
+			{
+				db_query(db,
+					"UPDATE accounts SET coinid=%d, coinsymbol='%s', hostaddr='%s' "
+					"WHERE id=%d AND IFNULL(coinid,0)=0",
+					req->coind->id, req->coind->symbol,
+					client->sock->ip, req->userid);
+			}
+		}
+		else
+		{
+			db_query(db,
+				"INSERT INTO accounts "
+				"(username, coinsymbol, coinid, balance, donation, hostaddr) "
+				"VALUES ('%s', '%s', %d, 0, 0, '%s')",
+				req->address, req->coind->symbol,
+				req->coind->id, client->sock->ip);
+
+			req->userid = (int)mysql_insert_id(&db->mysql);
+			if(!req->userid)
+			{
+				clientlog(client,
+					"unable to create %s auxiliary payout account",
+					req->coind->symbol);
+				CommonUnlock(&g_db_mutex);
+				return false;
+			}
+		}
+
+		client->aux_accounts[client->aux_accounts_count].coinid =
+			req->coind->id;
+		client->aux_accounts[client->aux_accounts_count].userid =
+			req->userid;
+		client->aux_accounts_count++;
+
+		debuglog("%s: aux payout %s -> userid %d\n",
+			g_current_algo->name, req->coind->symbol, req->userid);
+	}
+
+	CommonUnlock(&g_db_mutex);
+	return true;
+}
+

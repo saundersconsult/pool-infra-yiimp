@@ -49,3 +49,7 @@ changes in future upstream releases.
 ## Related changes
 
 Reference applicable Pool Infra change records.
+
+## Accepted decisions
+
+- `ADR-001-coin-health-and-administrative-enable.md`

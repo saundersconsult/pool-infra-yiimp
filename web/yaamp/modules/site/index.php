@@ -93,12 +93,8 @@ if (!$list) {
         $algo = $coin->algo;
         $auto_exchange = isset($coin->auto_exchange) ? $coin->auto_exchange : 1; // Default to 1 if null
 
-        $port_db = getdbosql('db_stratums', "algo=:algo and symbol=:symbol", [
-            ':algo' => $algo,
-            ':symbol' => $symbol
-        ]);
-
-        $port = $port_db ? $port_db->port : '0000';
+        // Pool Infra: shared Stratum listener is selected by algorithm.
+        $port = getAlgoPort($algo);
 
         // Add algorithm headings correctly
         if ($count == 0 || $algo != $algoheading) {

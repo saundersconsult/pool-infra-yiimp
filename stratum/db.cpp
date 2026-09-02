@@ -191,6 +191,17 @@ void db_update_coinds(YAAMP_DB *db)
 {
 	if(!db) return;
 
+	// Pool Infra: retry administratively enabled but temporarily
+	// unavailable coins on a bounded cadence. This does not delay
+	// withdrawal of failed mining work.
+	static time_t last_recovery_probe = 0;
+	time_t now = time(NULL);
+	bool recovery_probe = !last_recovery_probe ||
+		now - last_recovery_probe >= 300;
+
+	if(recovery_probe)
+		last_recovery_probe = now;
+
 	for(CLI li = g_list_coind.first; li; li = li->next)
 	{
 		YAAMP_COIND *coind = (YAAMP_COIND *)li->data;
@@ -208,7 +219,8 @@ void db_update_coinds(YAAMP_DB *db)
 		"reward_mul, symbol, auxpow, actual_ttf, network_ttf, usememorypool, hasmasternodes, algo, symbol2, "
 		"rpccurl, rpcssl, rpccert, account, multialgos, max_miners, max_shares, usesegwit, "
 		"auto_exchange, enable_rpcdebug, personalization, powlimit_bits, block_time, usemweb "
-		"FROM coins WHERE enable AND auto_ready AND algo='%s' ORDER BY index_avg", g_stratum_algo);
+		"FROM coins WHERE enable AND (auto_ready OR %d) AND algo='%s' ORDER BY index_avg",
+		recovery_probe ? 1 : 0, g_stratum_algo);
 
 	MYSQL_RES *result = mysql_store_result(&db->mysql);
 	if(!result) yaamp_error("Cant query database");
@@ -385,7 +397,36 @@ void db_update_coinds(YAAMP_DB *db)
 			usleep(100*YAAMP_MS);
 		}
 		coind->touch = true;
-		coind_create_job(coind);
+
+		bool was_auto_ready = coind->auto_ready;
+		bool job_ready = coind_create_job(coind);
+
+		// Pool Infra: restore operational readiness only after the daemon
+		// has successfully produced valid mining work.
+		if(!was_auto_ready)
+		{
+			if(job_ready && !coind->deleted)
+			{
+				db_query(db,
+					"update coins set auto_ready=1 where id=%d and enable=1 and auto_ready=0",
+					coind->id);
+
+				if(mysql_affected_rows(&db->mysql) > 0)
+				{
+					coind->auto_ready = true;
+					debuglog("recovered %s\n", coind->symbol);
+				}
+				else
+				{
+					// Administrative state changed while recovery was in flight.
+					object_delete(coind);
+				}
+			}
+			else if(!coind->deleted)
+			{
+				object_delete(coind);
+			}
+		}
 	}
 
 	mysql_free_result(result);

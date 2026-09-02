@@ -68,3 +68,11 @@ Record affected files/functions and accepted Git commit(s).
 ## Related decisions
 
 Reference applicable ADR/decision records.
+
+## Accepted change records
+
+### 74988f92.0003
+
+- `CHG-001-automatic-coin-recovery.md`
+- `CHG-002-generic-auxpow-beneficiary-mapping.md`
+- `CHG-003-shared-stratum-port-ui.md`

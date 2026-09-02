@@ -21,6 +21,7 @@ void db_update_remotes(YAAMP_DB *db);
 
 //int db_find_user(YAAMP_DB *db, YAAMP_CLIENT *client);
 void db_add_user(YAAMP_DB *db, YAAMP_CLIENT *client);
+bool db_resolve_aux_accounts(YAAMP_DB *db, YAAMP_CLIENT *client);
 
 void db_add_worker(YAAMP_DB *db, YAAMP_CLIENT *client);
 void db_clear_worker(YAAMP_DB *db, YAAMP_CLIENT *client);

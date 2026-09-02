@@ -59,17 +59,18 @@ class CoinService
                 sleep(3);
                 $info = $remote->getinfo();
                 if (!$info) {
-                    Yii::info("{$coin->symbol} disabled after 2 failed attempts. {$remote->error}", __CLASS__);
-                    $coin->enable      = false;
+                    Yii::info("{$coin->symbol} unavailable after 2 failed attempts. {$remote->error}", __CLASS__);
+                    $coin->auto_ready  = false;
                     $coin->connections = 0;
+                    $coin->errors      = $remote->error;
                     $coin->save();
                     continue;
                 }
             }
 
-            if ($coin->auto_ready && !empty($info)) {
-                $coin->enable = true;
-            } elseif (empty($info)) {
+            // Pool Infra: enable is administrative intent and must not be
+            // changed by automatic daemon-health polling.
+            if (empty($info)) {
                 continue;
             }
 

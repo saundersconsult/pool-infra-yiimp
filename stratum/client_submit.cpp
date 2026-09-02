@@ -333,7 +333,20 @@ static void client_do_submit(YAAMP_CLIENT *client, YAAMP_JOB *job, YAAMP_JOB_VAL
 			{
 				debuglog("*** ACCEPTED %s %d (+1)\n", coind_aux->name, coind_aux->height);
 
-				block_add(client->userid, client->workerid, coind_aux->id, coind_aux->height,
+                                int aux_userid = client->userid;
+                                int aux_workerid = client->workerid;
+
+                                for(int a=0; a<client->aux_accounts_count; a++)
+                                {
+                                        if(client->aux_accounts[a].coinid == coind_aux->id)
+                                        {
+                                                aux_userid = client->aux_accounts[a].userid;
+                                                aux_workerid = 0;
+                                                break;
+                                        }
+                                }
+
+				block_add(aux_userid, aux_workerid, coind_aux->id, coind_aux->height,
 							target_to_diff_coin(coin_target_aux, coind_aux->powlimit_bits - ((is_equihash)? 0 : 16)),
 							target_to_diff_coin(hash_int, coind_aux->powlimit_bits - ((is_equihash)? 0 : 16)),
 							current_aux->hash, "", 0,client->solo);
