@@ -53,6 +53,25 @@ class PaymentService
      */
     public function payCoin(Coins $coin): void
     {
+        $lockName = "yiimp-payment-coin-{$coin->id}";
+
+        if (!Yii::$app->mutex->acquire($lockName, 0)) {
+            Yii::warning("payment: {$coin->symbol} payout already running", __CLASS__);
+            return;
+        }
+
+        try {
+            $this->payCoinLocked($coin);
+        } finally {
+            Yii::$app->mutex->release($lockName);
+        }
+    }
+
+    /**
+     * Execute a payout while the per-coin payment mutex is held.
+     */
+    private function payCoinLocked(Coins $coin): void
+    {
         $remote = new \app\components\rpc\WalletRPC($coin);
         $info   = $remote->getinfo();
 
@@ -216,9 +235,23 @@ class PaymentService
 
         $account = $coin->account ?? '';
         $siteName = defined('YIIMP_SITE_NAME') ? YIIMP_SITE_NAME : 'Yiimp';
-        $tx       = $coin->txmessage
-            ? $remote->sendmany($account, $addresses, 1, $siteName)
-            : $remote->sendmany($account, $addresses);
+
+        // NewYorkCoin only: miners pay the network transaction fee.
+        // The NYC daemon calculates and subtracts the fee from recipient outputs.
+        if ($coin->symbol === 'NYC') {
+            $comment = $coin->txmessage ? $siteName : '';
+            $tx = $remote->sendmany(
+                $account,
+                $addresses,
+                1,
+                $comment,
+                array_keys($addresses)
+            );
+        } else {
+            $tx = $coin->txmessage
+                ? $remote->sendmany($account, $addresses, 1, $siteName)
+                : $remote->sendmany($account, $addresses);
+        }
 
         $errMsg = null;
         if (!$tx) {
