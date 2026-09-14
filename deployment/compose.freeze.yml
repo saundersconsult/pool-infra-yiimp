@@ -5,14 +5,14 @@ services:
       - -c
       - |
         CONF=/etc/supervisor/conf.d/supervisord.conf
-        BEFORE=$(sed -n '/^\[program:yiimp-queue-general\]$/,/^\[/p' "$CONF" | grep -c '^autostart=true$')
-        if [ "$BEFORE" -ne 1 ]; then
-          echo "*** STOP: expected exactly one general-worker autostart=true; found $BEFORE ***"
+        BEFORE=$$(sed -n '/^\[program:yiimp-queue-general\]$$/,/^\[/p' "$$CONF" | grep -c '^autostart=true$$')
+        if [ "$$BEFORE" -ne 1 ]; then
+          echo "*** STOP: expected exactly one general-worker autostart=true; found $$BEFORE ***"
           false
         else
-          sed -i '/^\[program:yiimp-queue-general\]$/,/^\[/ s/^autostart=true$/autostart=false/' "$CONF"
-          AFTER=$(sed -n '/^\[program:yiimp-queue-general\]$/,/^\[/p' "$CONF" | grep -c '^autostart=false$')
-          if [ "$AFTER" -ne 1 ]; then
+          sed -i '/^\[program:yiimp-queue-general\]$$/,/^\[/ s/^autostart=true$$/autostart=false/' "$$CONF"
+          AFTER=$$(sed -n '/^\[program:yiimp-queue-general\]$$/,/^\[/p' "$$CONF" | grep -c '^autostart=false$$')
+          if [ "$$AFTER" -ne 1 ]; then
             echo "*** STOP: general-worker payout freeze was not applied exactly once ***"
             false
           else
