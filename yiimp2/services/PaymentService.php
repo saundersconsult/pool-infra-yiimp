@@ -216,9 +216,22 @@ class PaymentService
 
         $account = $coin->account ?? '';
         $siteName = defined('YIIMP_SITE_NAME') ? YIIMP_SITE_NAME : 'Yiimp';
-        $tx       = $coin->txmessage
-            ? $remote->sendmany($account, $addresses, 1, $siteName)
-            : $remote->sendmany($account, $addresses);
+        // NewYorkCoin only: miners pay the network transaction fee.
+        // The NYC daemon calculates and subtracts the fee from recipient outputs.
+        if ($coin->symbol === 'NYC') {
+            $comment = $coin->txmessage ? $siteName : '';
+            $tx = $remote->sendmany(
+                $account,
+                $addresses,
+                1,
+                $comment,
+                array_keys($addresses)
+            );
+        } else {
+            $tx = $coin->txmessage
+                ? $remote->sendmany($account, $addresses, 1, $siteName)
+                : $remote->sendmany($account, $addresses);
+        }
 
         $errMsg = null;
         if (!$tx) {
