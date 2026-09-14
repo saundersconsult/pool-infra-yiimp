@@ -1,0 +1,81 @@
+services:
+
+  pool-infra-yiimp-db:
+    image: mariadb:11
+    container_name: pool-infra-yiimp-db
+
+    restart: unless-stopped
+
+    environment:
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD}
+      MARIADB_DATABASE: yaamp
+      YIIMP_WEB_DB_PASSWORD: ${YIIMP_WEB_DB_PASSWORD}
+      YIIMP_STRATUM_DB_PASSWORD: ${YIIMP_STRATUM_DB_PASSWORD}
+
+    volumes:
+      - ./db:/var/lib/mysql
+      - ./init-db.sh:/docker-entrypoint-initdb.d/10-pool-infra-yiimp-init.sh:ro
+      - ./source/sql:/yiimp-sql:ro
+
+    networks:
+      - pool_infra_yiimp_net
+
+    healthcheck:
+      test:
+        - CMD
+        - healthcheck.sh
+        - --connect
+        - --innodb_initialized
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  pool-infra-yiimp:
+    build:
+      context: ./source
+      dockerfile: Dockerfile.yiimp
+      target: image-prod
+
+    image: pool-infra-yiimp:74988f92.0002-dgc19
+    container_name: pool-infra-yiimp
+
+    ports:
+      - "8080:8080"
+      - "9000:9000"
+      - "3333:3333"
+
+    environment:
+      YIIMP_WEB_DB_PASSWORD: ${YIIMP_WEB_DB_PASSWORD}
+    restart: unless-stopped
+
+    depends_on:
+      pool-infra-yiimp-db:
+        condition: service_healthy
+
+    volumes:
+      - ./config:/etc/yiimp:ro
+      - ./logs:/var/log/yiimp
+      - ./logs:/var/log/apache2
+
+    networks:
+      - pool_infra_yiimp_net
+      - aby_net
+      - neng_net
+      - yiimp_net
+
+networks:
+  pool_infra_yiimp_net:
+    name: pool_infra_yiimp_net
+    driver: bridge
+
+  aby_net:
+    external: true
+    name: aby_net
+
+  neng_net:
+    external: true
+    name: neng_net
+
+  yiimp_net:
+    external: true
+    name: yiimp_net
