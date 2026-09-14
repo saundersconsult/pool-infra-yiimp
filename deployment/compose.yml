@@ -36,7 +36,7 @@ services:
       dockerfile: Dockerfile.yiimp
       target: image-prod
 
-    image: pool-infra-yiimp:74988f92.0002-dgc19
+    image: pool-infra-yiimp:74988f92.0005
     container_name: pool-infra-yiimp
 
     ports:
